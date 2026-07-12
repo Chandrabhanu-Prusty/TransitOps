@@ -137,7 +137,7 @@ interface FleetContextType {
   deleteDriver: (id: string) => void;
   trips: any[];
   setTrips: React.Dispatch<React.SetStateAction<any[]>>;
-  createTrip: (newTrip: any) => void;
+  createTrip: (newTrip: any, options?: any) => void;
   dispatchTrip: (id: string) => void;
   completeTrip: (payload: { id: string; data: any }) => void;
   cancelTrip: (id: string) => void;
@@ -1421,39 +1421,6 @@ function DispatchScreen() {
     setShowCompleteModal(false);
     setSelectedTrip(null);
     alert(`Trip completed successfully.`);
-
-    // 4. Log Fuel log entry
-    const newFuelLog = {
-      id: `F-00${fuelLogs.length + 1}`,
-      vehicleId: v.id,
-      vehicleName: v.name,
-      driver: d.name,
-      date: TODAY.toISOString().slice(0, 10),
-      liters: fuel,
-      costPer: "$1.50",
-      total: `$${(fuel * 1.50).toFixed(2)}`,
-      station: "Odoo Dispatch Depot",
-      odometer: `${newOdo.toLocaleString()} mi`
-    };
-    setFuelLogs(prev => [...prev, newFuelLog]);
-
-    // 5. Log Expense log entry
-    const newExpense = {
-      id: `E-00${expenses.length + 1}`,
-      vehicleId: v.id,
-      vehicleName: v.name,
-      category: "Toll",
-      amount: `$${(parseVal(selectedTrip.cost) * 0.1).toFixed(2)}`, // 10% of cost as tolls
-      date: TODAY.toISOString().slice(0, 10),
-      description: `Tolls for Trip ${selectedTrip.id} (${selectedTrip.origin} to ${selectedTrip.destination})`,
-      receipt: true
-    };
-    setExpenses(prev => [...prev, newExpense]);
-
-    // Clean up
-    setShowCompleteModal(false);
-    setSelectedTrip(null);
-    alert(`Trip completed successfully! Odometer and fuel usage logged.`);
   };
 
   const filteredTrips = trips.filter(t => statusFilter === "all" || t.status === statusFilter);
