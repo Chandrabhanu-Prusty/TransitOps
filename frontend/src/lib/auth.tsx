@@ -57,11 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (token: string, user: User) => {
     localStorage.setItem('transitops_token', token);
+    localStorage.setItem('transitops_user', JSON.stringify(user));
     setUser(user);
   };
 
   const logout = () => {
     localStorage.removeItem('transitops_token');
+    localStorage.removeItem('transitops_user');
     setUser(null);
     apiFetch('/auth/logout', { method: 'POST' }).catch(console.error);
     navigate('/login');

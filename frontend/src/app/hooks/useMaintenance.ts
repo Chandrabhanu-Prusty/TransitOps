@@ -20,30 +20,30 @@ export const useMaintenance = () => {
       return normalizeArray(res.data, 'maintenance');
     },
   });
-  const maintenance = data ?? [];
+  
+  const maintenanceLogs = data ?? [];
+  
   const create = useMutation({
-    mutationFn: (newItem: any) => api.post('/maintenance', newItem),
+    mutationFn: (newLog: any) => api.post('/maintenance', newLog),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
   });
+  
   const update = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/maintenance/${id}`, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
   });
-  const close = useMutation({
-    mutationFn: ({ id, cost }: { id: string; cost: number }) => api.patch(`/maintenance/${id}/close`, { cost }),
+
+  const closeMaintenance = useMutation({
+    mutationFn: (id: string) => api.patch(`/maintenance/${id}/close`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
   });
-  const del = useMutation({
-    mutationFn: (id: string) => api.delete(`/maintenance/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
-  });
+  
   return {
-    maintenance,
+    maintenanceLogs,
     isLoading,
     isError,
     createMaintenance: create.mutate,
     updateMaintenance: update.mutate,
-    closeMaintenance: close.mutate,
-    deleteMaintenance: del.mutate,
+    closeMaintenance: closeMaintenance.mutate
   };
 };

@@ -60,7 +60,7 @@ function LoginForm() {
         data,
       });
       login(res.data.token, res.data.user);
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setServerError(err.message || 'Invalid email or password');

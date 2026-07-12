@@ -25,12 +25,16 @@ export const useTrips = () => {
     mutationFn: (newTrip: any) => api.post('/trips', newTrip),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trips'] }),
   });
-  const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/trips/${id}`, data),
+  const dispatch = useMutation({
+    mutationFn: (id: string) => api.patch(`/trips/${id}/dispatch`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trips'] }),
   });
-  const del = useMutation({
-    mutationFn: (id: string) => api.delete(`/trips/${id}`),
+  const complete = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.patch(`/trips/${id}/complete`, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trips'] }),
+  });
+  const cancel = useMutation({
+    mutationFn: (id: string) => api.patch(`/trips/${id}/cancel`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trips'] }),
   });
   return {
@@ -38,7 +42,8 @@ export const useTrips = () => {
     isLoading,
     isError,
     createTrip: create.mutate,
-    updateTrip: update.mutate,
-    deleteTrip: del.mutate,
+    dispatchTrip: dispatch.mutate,
+    completeTrip: complete.mutate,
+    cancelTrip: cancel.mutate,
   };
 };

@@ -44,6 +44,7 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
   if (response.status === 401) {
     // Global 401 handler
     localStorage.removeItem('transitops_token');
+    localStorage.removeItem('transitops_user');
     window.dispatchEvent(new Event('auth:unauthorized'));
     throw new ApiError(401, 'Unauthorized');
   }

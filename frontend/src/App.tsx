@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RouterProvider, createBrowserRouter, Link, Outlet } from 'react-router-dom'
+import { RouterProvider, createBrowserRouter, Link, Outlet, Navigate } from 'react-router-dom'
 import DashboardApp from './app/DashboardApp'
 import Login from './app/pages/Login'
 import ProtectedRoute from './app/components/ProtectedRoute'
@@ -51,6 +51,10 @@ const router = createBrowserRouter([
       { path: '/login', element: <Login /> },
       {
         path: '/',
+        element: <Navigate to="/dashboard" replace />
+      },
+      {
+        path: '/dashboard',
         element: (
           <ProtectedRoute>
             <DashboardApp />

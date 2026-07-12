@@ -1,10 +1,13 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVehicles } from "./hooks/useVehicles";
 import { useDrivers } from "./hooks/useDrivers";
 import { useTrips } from "./hooks/useTrips";
-import { authService } from "./services/authService";
+import { useFuel } from "./hooks/useFuel";
+import { useExpenses } from "./hooks/useExpenses";
+import { useMaintenance } from "./hooks/useMaintenance";
+import { useReports } from "./hooks/useReports";
 import {
   LayoutDashboard, Truck, Users, Wrench, Fuel, BarChart3, Settings,
   Search, Bell, ChevronDown, ChevronLeft, ChevronRight, Plus, Download,
@@ -56,7 +59,7 @@ function HealthBadge() {
     return (
       <span style={{ ...baseStyle, background: "#f1f5f9", color: "#64748b" }} className="animate-pulse">
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#64748b" }} />
-        Checking APIΓÇª
+        Checking API…
       </span>
     );
   }
@@ -83,7 +86,7 @@ function cn(...c: (string | false | undefined | null)[]): string {
 }
 
 
-// ΓöÇΓöÇΓöÇ DATA ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── DATA ────────────────────────────────────────────────────────────────────
 
 import { createContext, useContext, useEffect } from "react";
 
@@ -92,7 +95,7 @@ type Screen = "dashboard" | "vehicles" | "drivers" | "dispatch" | "maintenance" 
 const TODAY = new Date("2025-01-15");
 
 
-// ΓöÇΓöÇΓöÇ DATA ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── DATA ────────────────────────────────────────────────────────────────────
 
 const fuelChartData = [
   { week: "W48", mpg: 7.2, target: 8.0 }, { week: "W49", mpg: 7.8, target: 8.0 },
@@ -135,14 +138,20 @@ interface FleetContextType {
   trips: any[];
   setTrips: React.Dispatch<React.SetStateAction<any[]>>;
   createTrip: (newTrip: any) => void;
-  updateTrip: (payload: { id: string; data: any }) => void;
-  deleteTrip: (id: string) => void;
+  dispatchTrip: (id: string) => void;
+  completeTrip: (payload: { id: string; data: any }) => void;
+  cancelTrip: (id: string) => void;
   maintenance: any[];
   setMaintenance: React.Dispatch<React.SetStateAction<any[]>>;
+  createMaintenance: (newLog: any) => void;
+  updateMaintenance: (payload: { id: string; data: any }) => void;
+  closeMaintenance: (id: string) => void;
   fuelLogs: any[];
   setFuelLogs: React.Dispatch<React.SetStateAction<any[]>>;
+  createFuelLog: (newLog: any) => void;
   expenses: any[];
   setExpenses: React.Dispatch<React.SetStateAction<any[]>>;
+  createExpense: (newExpense: any) => void;
   role: "admin" | "manager" | "dispatcher" | "viewer";
   setRole: (r: "admin" | "manager" | "dispatcher" | "viewer") => void;
   currentUser: { name: string; roleName: string; email?: string; phone?: string; dept?: string };
@@ -161,7 +170,7 @@ function FleetProvider({ children, role, setRole }: { children: React.ReactNode,
   const queryClient = useQueryClient();
   const { vehicles, createVehicle, updateVehicle, deleteVehicle } = useVehicles();
   const { drivers, createDriver, updateDriver, deleteDriver } = useDrivers();
-  const { trips, createTrip, updateTrip, deleteTrip } = useTrips();
+  const { trips, createTrip, dispatchTrip, completeTrip, cancelTrip } = useTrips();
 
   // The legacy screens mutate these collections via setVehicles(prev => ...).
   // We funnel those through React Query's setQueryData so the cache stays
@@ -182,16 +191,32 @@ function FleetProvider({ children, role, setRole }: { children: React.ReactNode,
     );
   };
 
-  const [maintenance, setMaintenance] = useState<any[]>([]);
-  const [fuelLogs, setFuelLogs] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
+  const { maintenanceLogs: maintenance, createMaintenance, updateMaintenance, closeMaintenance } = useMaintenance();
+  const { fuelLogs, createFuelLog } = useFuel();
+  const { expenses, createExpense } = useExpenses();
 
-  // Seed current user from JWT stored by authService
-  const loggedInUser = authService.getUser();
+  const setMaintenance: React.Dispatch<React.SetStateAction<any[]>> = (updater) => {
+    queryClient.setQueryData<any[]>(['maintenance'], (prev) =>
+      typeof updater === 'function' ? (updater as (p: any[] | undefined) => any[])(prev ?? []) : updater
+    );
+  };
+  const setFuelLogs: React.Dispatch<React.SetStateAction<any[]>> = (updater) => {
+    queryClient.setQueryData<any[]>(['fuel'], (prev) =>
+      typeof updater === 'function' ? (updater as (p: any[] | undefined) => any[])(prev ?? []) : updater
+    );
+  };
+  const setExpenses: React.Dispatch<React.SetStateAction<any[]>> = (updater) => {
+    queryClient.setQueryData<any[]>(['expenses'], (prev) =>
+      typeof updater === 'function' ? (updater as (p: any[] | undefined) => any[])(prev ?? []) : updater
+    );
+  };
+
+  const { user } = useAuth();
+  
   const [currentUser, setCurrentUser] = useState({
-    name: loggedInUser?.name ?? "User",
-    roleName: loggedInUser?.role ?? "DISPATCHER",
-    email: loggedInUser?.email ?? "",
+    name: user?.name ?? "User",
+    roleName: user?.role ?? "DISPATCHER",
+    email: user?.email ?? "",
     phone: "",
     dept: "Fleet Operations",
   });
@@ -221,14 +246,20 @@ function FleetProvider({ children, role, setRole }: { children: React.ReactNode,
       trips,
       setTrips,
       createTrip,
-      updateTrip,
-      deleteTrip,
+      dispatchTrip,
+      completeTrip,
+      cancelTrip,
       maintenance,
       setMaintenance,
+      createMaintenance,
+      updateMaintenance,
+      closeMaintenance,
       fuelLogs,
       setFuelLogs,
+      createFuelLog,
       expenses,
       setExpenses,
+      createExpense,
       role,
       setRole,
       currentUser,
@@ -239,7 +270,7 @@ function FleetProvider({ children, role, setRole }: { children: React.ReactNode,
   );
 }
 
-// ΓöÇΓöÇΓöÇ UI PRIMITIVES ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── UI PRIMITIVES ───────────────────────────────────────────────────────────
 
 const statusMap: Record<string, { bg: string; text: string; dot: string }> = {
   available:     { bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
@@ -281,7 +312,7 @@ function SafetyBadge({ score }: { score: number }) {
 }
 
 function ExpiryBadge({ expiry }: { expiry: string }) {
-  if (!expiry) return <span className="text-xs text-slate-400">ΓÇö</span>;
+  if (!expiry) return <span className="text-xs text-slate-400">—</span>;
   const days = Math.ceil((new Date(expiry).getTime() - TODAY.getTime()) / 86400000);
   const formatted = new Date(expiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   
@@ -376,7 +407,7 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" | "lg"
   );
 }
 
-// ΓöÇΓöÇΓöÇ NAVIGATION CONFIG ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── NAVIGATION CONFIG ───────────────────────────────────────────────────────
 
 const navItems = [
   { id: "dashboard" as Screen, label: "Dashboard", Icon: LayoutDashboard, path: "/dashboard" },
@@ -405,6 +436,7 @@ function Sidebar({ screen, setScreen, collapsed, onToggle }: {
 }) {
   const { currentUser, role } = useFleet();
   const { user, logout } = useAuth();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const allowedItems = navItems.filter(item => {
     if (item.id === "reports" && role === "dispatcher") return false;
@@ -464,7 +496,7 @@ function Sidebar({ screen, setScreen, collapsed, onToggle }: {
               <p className="text-[12px] font-semibold text-slate-200 truncate leading-none">{user?.name || currentUser.name}</p>
               <p className="text-[10px] text-slate-500 mt-0.5">{user ? formatRole(user.role) : currentUser.roleName}</p>
             </div>
-            <button onClick={logout} className="p-1 hover:bg-slate-800 rounded transition-colors" title="Log out">
+            <button onClick={() => setShowLogoutModal(true)} className="p-1 hover:bg-slate-800 rounded transition-colors" title="Log out">
               <LogOut size={12} className="text-slate-500" />
             </button>
           </div>
@@ -476,11 +508,30 @@ function Sidebar({ screen, setScreen, collapsed, onToggle }: {
             : <ChevronLeft size={13} className="text-slate-500" />}
         </button>
       </div>
+
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5">
+              <h3 className="text-[16px] font-bold text-slate-900">Confirm Logout</h3>
+              <p className="text-[13px] text-slate-500 mt-1">Are you sure you want to logout?</p>
+            </div>
+            <div className="flex gap-2 p-4 bg-slate-50 border-t border-slate-100">
+              <button onClick={() => setShowLogoutModal(false)} className="flex-1 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[13px] font-medium rounded-xl transition-colors">
+                Cancel
+              </button>
+              <button onClick={logout} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white text-[13px] font-bold rounded-xl shadow-md shadow-red-600/20 transition-all">
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
 
-// ΓöÇΓöÇΓöÇ TOP NAV ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── TOP NAV ─────────────────────────────────────────────────────────────────
 
 function TopNav({ screen }: { screen: Screen }) {
   const { title, sub } = pageMeta[screen];
@@ -499,7 +550,7 @@ function TopNav({ screen }: { screen: Screen }) {
         <HealthBadge />
         <div className="relative hidden md:block">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" placeholder="Search anythingΓÇª"
+          <input type="text" placeholder="Search anything…"
             className="pl-8 pr-4 py-2 text-[13px] border border-slate-200 rounded-lg bg-slate-50 w-52 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all" />
         </div>
         <button className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors">
@@ -516,7 +567,7 @@ function TopNav({ screen }: { screen: Screen }) {
   );
 }
 
-// ΓöÇΓöÇΓöÇ TABLE HEADER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── TABLE HEADER ────────────────────────────────────────────────────────────
 
 function TH({ children }: { children?: React.ReactNode }) {
   return (
@@ -530,9 +581,9 @@ function TD({ children, className, colSpan }: { children?: React.ReactNode; clas
   return <td className={cn("px-5 py-3.5", className)} colSpan={colSpan}>{children}</td>;
 }
 
-// ΓöÇΓöÇΓöÇ GATED ROUTE / ACCESS DENIED ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── GATED ROUTE / ACCESS DENIED ─────────────────────────────────────────────
 
-// ΓöÇΓöÇΓöÇ DASHBOARD ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 
 
@@ -575,7 +626,7 @@ function DashboardScreen() {
     { label: "Fleet Utilization", value: `${utilizationPct}%`, icon: Activity, trend: "up" as const, trendValue: `Of non-retired vehicles`, color: "bg-violet-500" },
   ];
 
-  // Types ΓÇö check both frontend field `type` and backend field; match status both ways
+  // Types — check both frontend field `type` and backend field; match status both ways
   const vehType = (v: any) => v.type ?? '';
   const isOnTrip = (v: any) => v.status === "on-trip" || v.status === "on_trip";
 
@@ -636,7 +687,7 @@ function DashboardScreen() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-[12px] text-slate-400">
           <Calendar size={13} />
-          <span>January 15, 2025 ΓÇö Last updated just now</span>
+          <span>January 15, 2025 — Last updated just now</span>
         </div>
         <button className="flex items-center gap-1.5 text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors">
           <RefreshCw size={12} />Refresh
@@ -657,7 +708,7 @@ function DashboardScreen() {
               <h3 className="text-[13px] font-semibold text-slate-900">Recent Trips</h3>
               <p className="text-[11px] text-slate-400 mt-0.5">Latest trip records</p>
             </div>
-            <button className="text-[12px] text-blue-600 hover:text-blue-700 font-medium">View all ΓåÆ</button>
+            <button className="text-[12px] text-blue-600 hover:text-blue-700 font-medium">View all →</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -752,7 +803,7 @@ function DashboardScreen() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ VEHICLES ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── VEHICLES ────────────────────────────────────────────────────────────────
 
 function VehiclesScreen() {
   const { vehicles, createVehicle, deleteVehicle, role } = useFleet();
@@ -760,7 +811,7 @@ function VehiclesScreen() {
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
 
-  // Form states ΓÇô mapped to backend Prisma schema fields
+  // Form states – mapped to backend Prisma schema fields
   const [formNameModel, setFormNameModel] = useState("");
   const [formType, setFormType] = useState("Van");
   const [formRegNo, setFormRegNo] = useState("");
@@ -832,8 +883,8 @@ function VehiclesScreen() {
     const v = vehicles.find(veh => veh.id === id);
     if (!v) return;
     const name = v.nameModel ?? v.name ?? "this vehicle";
-    if (v.status === "on_trip" || v.status === "on-trip") { alert(`Cannot delete ${name} ΓÇö currently on a trip.`); return; }
-    if (v.status === "in_shop" || v.status === "in-shop") { alert(`Cannot delete ${name} ΓÇö currently in maintenance.`); return; }
+    if (v.status === "on_trip" || v.status === "on-trip") { alert(`Cannot delete ${name} — currently on a trip.`); return; }
+    if (v.status === "in_shop" || v.status === "in-shop") { alert(`Cannot delete ${name} — currently in maintenance.`); return; }
     if (window.confirm(`Are you sure you want to delete ${name}?`)) deleteVehicle(id);
   };
 
@@ -857,7 +908,7 @@ function VehiclesScreen() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" placeholder="Search by name or registration numberΓÇª" value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder="Search by name or registration number…" value={search} onChange={e => setSearch(e.target.value)}
             className="pl-9 pr-4 py-2.5 text-[13px] border border-slate-200 rounded-xl bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)}
@@ -923,7 +974,7 @@ function VehiclesScreen() {
                   <TD><span className="text-[12px] text-slate-600 tabular-nums">{(v.odometer ?? 0).toLocaleString()} km</span></TD>
                   <TD><span className="text-[12px] text-slate-600 tabular-nums">{(v.maxLoadCapacity ?? v.capacity ?? 0).toLocaleString()} kg</span></TD>
                   <TD><span className="text-[12px] font-semibold text-slate-900 tabular-nums">${(v.acquisitionCost ?? 0).toLocaleString()}</span></TD>
-                  <TD><span className="text-[12px] text-slate-400">{v.region ?? "ΓÇö"}</span></TD>
+                  <TD><span className="text-[12px] text-slate-400">{v.region ?? "—"}</span></TD>
                   <TD>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={12} className="text-blue-600" /></button>
@@ -981,7 +1032,7 @@ function VehiclesScreen() {
             <button onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
             <button onClick={handleAddVehicle} disabled={isSubmitting} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
               {isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : null}
-              {isSubmitting ? "AddingΓÇª" : "Add Vehicle"}
+              {isSubmitting ? "Adding…" : "Add Vehicle"}
             </button>
           </div>
         </div>
@@ -1071,7 +1122,7 @@ function DriversScreen() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" placeholder="Search driver by nameΓÇª" value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder="Search driver by name…" value={search} onChange={e => setSearch(e.target.value)}
             className="pl-9 pr-4 py-2.5 text-[13px] border border-slate-200 rounded-xl bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)}
@@ -1190,15 +1241,17 @@ function DriversScreen() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ DISPATCH ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── DISPATCH ────────────────────────────────────────────────────────────────
 
 function DispatchScreen() {
   const {
-    vehicles, setVehicles,
-    drivers, setDrivers,
-    trips, setTrips,
-    fuelLogs, setFuelLogs,
-    expenses, setExpenses,
+    vehicles,
+    drivers,
+    trips,
+    createTrip,
+    dispatchTrip,
+    completeTrip,
+    cancelTrip,
     role
   } = useFleet();
 
@@ -1272,35 +1325,22 @@ function DispatchScreen() {
   const handleCreateTrip = (immediateDispatch: boolean) => {
     if (!selVeh || !selDrv) return;
 
-    const newTripId = `T-${Math.floor(1000 + Math.random() * 9000)}`;
-    const costEstimate = Math.round(Number(form.distance) * 2.8);
-
-    const newTrip = {
-      id: newTripId,
-      origin: form.origin,
+    const payload = {
+      source: form.origin,
       destination: form.destination,
+      cargoWeight: parseFloat(form.weight) || 0,
+      plannedDistance: parseFloat(form.distance) || 0,
       vehicleId: form.vehicleId,
-      vehicle: selVeh.name,
       driverId: form.driverId,
-      driver: selDrv.name,
-      cargo: form.cargoType,
-      weight: `${form.weight}t`,
-      distance: `${form.distance} mi`,
-      status: immediateDispatch ? "in-progress" : "pending",
-      departure: "Jan 15, " + new Date().toTimeString().slice(0, 5),
-      cost: `$${costEstimate.toLocaleString()}`,
-      revenue: Number(completeRevenue) || Math.round(costEstimate * 1.5),
-      finalOdometer: null,
-      fuelConsumed: null,
     };
 
-    // Update state
-    setTrips(prev => [...prev, newTrip]);
-
-    if (immediateDispatch) {
-      setVehicles(prev => prev.map(v => v.id === form.vehicleId ? { ...v, status: "on-trip" } : v));
-      setDrivers(prev => prev.map(d => d.id === form.driverId ? { ...d, status: "on-duty", vehicle: selVeh.id } : d));
-    }
+    createTrip(payload, {
+      onSuccess: (res: any) => {
+        if (immediateDispatch && res.data?.id) {
+          dispatchTrip(res.data.id);
+        }
+      }
+    });
 
     // Reset wizard
     setViewMode("list");
@@ -1321,17 +1361,9 @@ function DispatchScreen() {
       alert("Cannot dispatch: The assigned driver is no longer available.");
       return;
     }
-    if (d.expiry && new Date(d.expiry).getTime() < TODAY.getTime()) {
-      alert(`Cannot dispatch: Driver license is expired (${d.expiry}).`);
-      return;
-    }
 
-    // Update statuses
-    setTrips(prev => prev.map(t => t.id === trip.id ? { ...t, status: "in-progress" } : t));
-    setVehicles(prev => prev.map(veh => veh.id === trip.vehicleId ? { ...veh, status: "on-trip" } : veh));
-    setDrivers(prev => prev.map(drv => drv.id === trip.driverId ? { ...drv, status: "on-duty", vehicle: trip.vehicleId } : drv));
-
-    setSelectedTrip((prev: any) => prev ? { ...prev, status: "in-progress" } : null);
+    dispatchTrip(trip.id);
+    setSelectedTrip((prev: any) => prev ? { ...prev, status: "dispatched" } : null);
     alert(`Trip ${trip.id} has been dispatched!`);
   };
 
@@ -1339,14 +1371,7 @@ function DispatchScreen() {
   const handleCancelTrip = (trip: any) => {
     if (!window.confirm(`Are you sure you want to cancel trip ${trip.id}?`)) return;
 
-    setTrips(prev => prev.map(t => t.id === trip.id ? { ...t, status: "cancelled" } : t));
-    
-    // Release vehicle and driver if they were active
-    if (trip.status === "in-progress") {
-      setVehicles(prev => prev.map(veh => veh.id === trip.vehicleId ? { ...veh, status: "available" } : veh));
-      setDrivers(prev => prev.map(drv => drv.id === trip.driverId ? { ...drv, status: "available", vehicle: null } : drv));
-    }
-
+    cancelTrip(trip.id);
     setSelectedTrip((prev: any) => prev ? { ...prev, status: "cancelled" } : null);
     alert(`Trip ${trip.id} has been cancelled.`);
   };
@@ -1384,30 +1409,18 @@ function DispatchScreen() {
       return;
     }
 
-    // 1. Update trip status
-    setTrips(prev => prev.map(t => t.id === selectedTrip.id ? {
-      ...t,
-      status: "completed",
-      finalOdometer: newOdo,
-      fuelConsumed: fuel,
-      revenue: rev
-    } : t));
+    completeTrip({
+      id: selectedTrip.id,
+      data: {
+        finalOdometer: newOdo,
+        fuelConsumed: fuel,
+        revenue: rev,
+      }
+    });
 
-    // 2. Release vehicle and update odometer
-    setVehicles(prev => prev.map(veh => veh.id === selectedTrip.vehicleId ? {
-      ...veh,
-      status: "available",
-      odometer: newOdo,
-      mileage: `${newOdo.toLocaleString()} mi`
-    } : veh));
-
-    // 3. Release driver and increment trip count
-    setDrivers(prev => prev.map(drv => drv.id === selectedTrip.driverId ? {
-      ...drv,
-      status: "available",
-      trips: (drv.trips || 0) + 1,
-      vehicle: null
-    } : drv));
+    setShowCompleteModal(false);
+    setSelectedTrip(null);
+    alert(`Trip completed successfully.`);
 
     // 4. Log Fuel log entry
     const newFuelLog = {
@@ -1497,17 +1510,17 @@ function DispatchScreen() {
                     <TD>
                       <div className="flex items-center gap-1 text-[12px] text-slate-700">
                         <MapPin size={9} className="text-slate-400 shrink-0" />
-                        <span className="font-medium truncate max-w-[80px]">{t.origin}</span>
+                        <span className="font-medium truncate max-w-[80px]">{t.origin || t.source}</span>
                         <ArrowRight size={9} className="text-slate-300 shrink-0" />
                         <span className="truncate max-w-[80px]">{t.destination}</span>
                       </div>
                     </TD>
-                    <TD><span className="text-[12px] text-slate-700">{t.vehicle}</span></TD>
-                    <TD><span className="text-[12px] text-slate-700">{t.driver}</span></TD>
-                    <TD><span className="text-[12px] text-slate-500">{t.cargo}</span></TD>
-                    <TD><span className="text-[12px] text-slate-600 tabular-nums">{t.weight}</span></TD>
+                    <TD><span className="text-[12px] text-slate-700">{t.vehicle?.nameModel || t.vehicle?.registrationNumber || t.vehicle}</span></TD>
+                    <TD><span className="text-[12px] text-slate-700">{t.driver?.name || t.driver}</span></TD>
+                    <TD><span className="text-[12px] text-slate-500">{t.cargo || "General"}</span></TD>
+                    <TD><span className="text-[12px] text-slate-600 tabular-nums">{t.weight || `${t.cargoWeight} kg`}</span></TD>
                     <TD><StatusBadge status={t.status} /></TD>
-                    <TD><span className="text-[12px] font-semibold text-slate-900">{t.cost}</span></TD>
+                    <TD><span className="text-[12px] font-semibold text-slate-900">{t.cost || `$${Math.round(parseVal(t.plannedDistance ?? t.distance) * 2.8).toLocaleString()}`}</span></TD>
                     <TD>
                       <button onClick={() => setSelectedTrip(t)} className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors">
                         Details
@@ -1527,28 +1540,28 @@ function DispatchScreen() {
 
         {/* Trip detail modal */}
         {selectedTrip && (
-          <Modal open={!!selectedTrip} onClose={() => setSelectedTrip(null)} title={`Trip Details ΓÇö ${selectedTrip.id}`}>
+          <Modal open={!!selectedTrip} onClose={() => setSelectedTrip(null)} title={`Trip Details — ${selectedTrip.id}`}>
             <div className="space-y-5">
               <div className="bg-slate-50 rounded-xl p-4.5 space-y-3.5">
                 <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
                   <div className="flex items-center gap-2">
                     <MapPin size={13} className="text-blue-600" />
-                    <span className="text-[13px] font-bold text-slate-950">{selectedTrip.origin} ΓåÆ {selectedTrip.destination}</span>
+                    <span className="text-[13px] font-bold text-slate-950">{selectedTrip.origin || selectedTrip.source} → {selectedTrip.destination}</span>
                   </div>
                   <StatusBadge status={selectedTrip.status} />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div>
                     <span className="block text-[10px] text-slate-400 font-semibold uppercase">Cargo</span>
-                    <span className="text-[12px] font-semibold text-slate-900">{selectedTrip.cargo} ({selectedTrip.weight})</span>
+                    <span className="text-[12px] font-semibold text-slate-900">{selectedTrip.cargo || "General"} ({selectedTrip.weight || `${selectedTrip.cargoWeight} kg`})</span>
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 font-semibold uppercase">Distance</span>
-                    <span className="text-[12px] font-semibold text-slate-900">{selectedTrip.distance}</span>
+                    <span className="text-[12px] font-semibold text-slate-900">{selectedTrip.distance || `${selectedTrip.plannedDistance} mi`}</span>
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 font-semibold uppercase">Estimated Cost</span>
-                    <span className="text-[12px] font-semibold text-slate-900">{selectedTrip.cost}</span>
+                    <span className="text-[12px] font-semibold text-slate-900">{selectedTrip.cost || `$${Math.round(parseVal(selectedTrip.plannedDistance ?? selectedTrip.distance) * 2.8).toLocaleString()}`}</span>
                   </div>
                   {selectedTrip.status === "completed" && (
                     <div>
@@ -1621,7 +1634,7 @@ function DispatchScreen() {
 
         {/* Complete Trip submodal */}
         {showCompleteModal && (
-          <Modal open={showCompleteModal} onClose={() => setShowCompleteModal(false)} title={`Complete Trip ΓÇö ${selectedTrip?.id}`}>
+          <Modal open={showCompleteModal} onClose={() => setShowCompleteModal(false)} title={`Complete Trip — ${selectedTrip?.id}`}>
             <div className="space-y-4">
               {completeError && (
                 <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-[12px] text-red-600">
@@ -1691,7 +1704,7 @@ function DispatchScreen() {
           </div>
           <Field label="Cargo Type" error={errors.cargoType}>
             <select value={form.cargoType} onChange={e => set("cargoType", e.target.value)} className={ic}>
-              <option value="">Select cargo typeΓÇª</option>
+              <option value="">Select cargo type…</option>
               {["Auto Parts", "Electronics", "Food & Beverage", "Building Materials", "Medical Supplies", "Industrial Equipment", "Furniture", "Hazardous Materials", "Other"].map(c => <option key={c}>{c}</option>)}
             </select>
           </Field>
@@ -1704,7 +1717,7 @@ function DispatchScreen() {
             </Field>
           </div>
           <Field label="Special Instructions (optional)">
-            <textarea value={form.notes} onChange={e => set("notes", e.target.value)} className={cn(ic, "resize-none")} rows={3} placeholder="Fragile cargo, temperature control requirementsΓÇª" />
+            <textarea value={form.notes} onChange={e => set("notes", e.target.value)} className={cn(ic, "resize-none")} rows={3} placeholder="Fragile cargo, temperature control requirements…" />
           </Field>
           <div className="flex justify-end">
             <button onClick={() => { if (validateStep1()) setStep(2); }}
@@ -1802,7 +1815,7 @@ function DispatchScreen() {
               </div>
               <div>
                 <p className="text-[11px] text-slate-400">Route</p>
-                <p className="text-[14px] font-bold text-slate-900">{form.origin} ΓåÆ {form.destination}</p>
+                <p className="text-[14px] font-bold text-slate-900">{form.origin} → {form.destination}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4 pt-1">
@@ -1869,10 +1882,10 @@ function DispatchScreen() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ MAINTENANCE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── MAINTENANCE ─────────────────────────────────────────────────────────────
 
 function MaintenanceScreen() {
-  const { vehicles, setVehicles, maintenance, setMaintenance, role } = useFleet();
+  const { vehicles, setVehicles, maintenance, createMaintenance, closeMaintenance, role } = useFleet();
   const [showForm, setShowForm] = useState(false);
 
   // Form states
@@ -1904,19 +1917,16 @@ function MaintenanceScreen() {
     const costNum = parseFloat(formCost.replace(/[^0-9.]/g, "")) || 0;
 
     const newRecord = {
-      id: `M-00${maintenance.length + 1}`,
       vehicleId: v.id,
-      vehicleName: v.name,
       type: formType,
       technician: formTech,
-      start: formStart,
-      end: formEnd,
-      status: "in-progress",
-      cost: `$${costNum.toLocaleString()}`,
-      notes: formNotes,
+      startDate: new Date(formStart).toISOString(),
+      expectedEndDate: new Date(formEnd).toISOString(),
+      cost: costNum,
+      description: formNotes || "Scheduled maintenance",
     };
 
-    setMaintenance([newRecord, ...maintenance]);
+    createMaintenance(newRecord);
     
     // Set vehicle status to in-shop
     setVehicles(prev => prev.map(veh => veh.id === v.id ? { ...veh, status: "in-shop" } : veh));
@@ -1937,18 +1947,11 @@ function MaintenanceScreen() {
     const record = maintenance.find(m => m.id === id);
     if (!record) return;
 
-    const finalCostInput = window.prompt("Enter final service cost ($):", record.cost.replace(/[^0-9.]/g, ""));
-    if (finalCostInput === null) return; // User cancelled
-
-    const finalCost = parseFloat(finalCostInput) || 0;
-
-    // Update maintenance status
-    setMaintenance(prev => prev.map(m => m.id === id ? { ...m, status: "completed", cost: `$${finalCost.toLocaleString()}` } : m));
-
-    // Restore vehicle status to available
-    setVehicles(prev => prev.map(veh => veh.id === record.vehicleId ? { ...veh, status: "available" } : veh));
-
-    alert(`Service record ${id} marked completed.`);
+    if (window.confirm(`Are you sure you want to mark service record ${id} as completed?`)) {
+      closeMaintenance(id);
+      setVehicles(prev => prev.map(veh => veh.id === record.vehicleId ? { ...veh, status: "available" } : veh));
+      alert(`Service record ${id} marked completed.`);
+    }
   };
 
   return (
@@ -1998,7 +2001,7 @@ function MaintenanceScreen() {
             <Field label="Start Date"><input type="date" className={ic} value={formStart} onChange={e => setFormStart(e.target.value)} /></Field>
             <Field label="Estimated End Date"><input type="date" className={ic} value={formEnd} onChange={e => setFormEnd(e.target.value)} /></Field>
             <div className="sm:col-span-2">
-              <Field label="Service Notes"><textarea className={cn(ic, "resize-none")} rows={3} placeholder="Describe service detailsΓÇª" value={formNotes} onChange={e => setFormNotes(e.target.value)} /></Field>
+              <Field label="Service Notes"><textarea className={cn(ic, "resize-none")} rows={3} placeholder="Describe service details…" value={formNotes} onChange={e => setFormNotes(e.target.value)} /></Field>
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-4">
@@ -2028,7 +2031,7 @@ function MaintenanceScreen() {
                   <StatusBadge status={m.status} />
                 </div>
                 <div className="space-y-2">
-                  {[["Vehicle", m.vehicleName], ["Technician", m.technician], ["Start Date", m.start], ["Est. Completion", m.end], ["Estimated Cost", m.cost]].map(([l, v]) => (
+                  {[["Vehicle", m.vehicle?.nameModel || m.vehicleName], ["Technician", m.technician], ["Start Date", m.start], ["Est. Completion", m.end], ["Estimated Cost", m.cost]].map(([l, v]) => (
                     <div key={l} className="flex items-center justify-between">
                       <span className="text-[11px] text-slate-400">{l}</span>
                       <span className={cn("text-[12px] font-medium text-slate-700", l === "Estimated Cost" && "font-bold text-slate-900")}>{v}</span>
@@ -2066,7 +2069,7 @@ function MaintenanceScreen() {
               {maintenance.map(m => (
                 <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
                   <TD><span className="text-[11px] font-mono text-slate-400">{m.id}</span></TD>
-                  <TD><span className="text-[13px] text-slate-700">{m.vehicleName}</span></TD>
+                  <TD><span className="text-[13px] text-slate-700">{m.vehicle?.nameModel || m.vehicle?.registrationNumber || m.vehicleName}</span></TD>
                   <TD><span className="text-[13px] font-semibold text-slate-900">{m.type}</span></TD>
                   <TD><span className="text-[12px] text-slate-600">{m.technician}</span></TD>
                   <TD><span className="text-[12px] text-slate-500">{m.start}</span></TD>
@@ -2087,10 +2090,10 @@ function MaintenanceScreen() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ FUEL & EXPENSES ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── FUEL & EXPENSES ─────────────────────────────────────────────────────────
 
 function FuelScreen() {
-  const { vehicles, setVehicles, drivers, fuelLogs, setFuelLogs, expenses, setExpenses, maintenance, role } = useFleet();
+  const { vehicles, setVehicles, drivers, fuelLogs, createFuelLog, expenses, createExpense, maintenance, role } = useFleet();
   const [showFuel, setShowFuel] = useState(false);
   const [showExp, setShowExp] = useState(false);
 
@@ -2121,7 +2124,7 @@ function FuelScreen() {
   };
 
   // Compute stats
-  const totalFuelCost = fuelLogs.reduce((sum, f) => sum + parseVal(f.total), 0);
+  const totalFuelCost = fuelLogs.reduce((sum, f) => sum + parseVal(f.cost ?? f.total), 0);
   const totalOtherExpenses = expenses.reduce((sum, e) => sum + parseVal(e.amount), 0);
   const totalMaintCost = maintenance.reduce((sum, m) => sum + parseVal(m.cost), 0);
   const totalOperationalCost = totalFuelCost + totalOtherExpenses + totalMaintCost;
@@ -2147,19 +2150,13 @@ function FuelScreen() {
     const total = litersNum * costPerNum;
 
     const newFuel = {
-      id: `F-00${fuelLogs.length + 1}`,
       vehicleId: v.id,
-      vehicleName: v.name,
-      driver: fuelDriver,
-      date: fuelDate,
       liters: litersNum,
-      costPer: `$${costPerNum.toFixed(2)}`,
-      total: `$${total.toFixed(2)}`,
-      station: fuelStation,
-      odometer: `${odoNum.toLocaleString()} mi`
+      cost: total,
+      logDate: new Date(fuelDate).toISOString(),
     };
 
-    setFuelLogs([...fuelLogs, newFuel]);
+    createFuelLog(newFuel);
 
     // Update vehicle odometer if it is larger
     if (odoNum > v.odometer) {
@@ -2190,17 +2187,14 @@ function FuelScreen() {
     const amtNum = parseFloat(expAmount) || 0;
 
     const newExp = {
-      id: `E-00${expenses.length + 1}`,
       vehicleId: v.id,
-      vehicleName: v.name,
-      category: expCategory,
-      amount: `$${amtNum.toFixed(2)}`,
-      date: expDate,
-      description: expDesc,
-      receipt: expReceipt
+      type: expCategory,
+      amount: amtNum,
+      expenseDate: new Date(expDate).toISOString(),
+      notes: expDesc,
     };
 
-    setExpenses([...expenses, newExp]);
+    createExpense(newExp);
 
     // Clean up
     setShowExp(false);
@@ -2230,7 +2224,7 @@ function FuelScreen() {
         <div className="bg-blue-600 rounded-xl p-5 shadow-lg shadow-blue-600/20">
           <p className="text-[11px] font-semibold text-blue-200 uppercase tracking-wide">Total Operational Cost</p>
           <p className="text-[28px] font-extrabold text-white tabular-nums mt-2">${totalOperationalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          <p className="text-[11px] text-blue-200 mt-1.5">January 1ΓÇô15, 2025</p>
+          <p className="text-[11px] text-blue-200 mt-1.5">January 1–15, 2025</p>
         </div>
       </div>
 
@@ -2261,12 +2255,12 @@ function FuelScreen() {
             <tbody className="divide-y divide-slate-50">
               {fuelLogs.map(f => (
                 <tr key={f.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TD><span className="text-[13px] font-semibold text-slate-900">{f.vehicleName}</span></TD>
-                  <TD><span className="text-[12px] text-slate-600">{f.driver}</span></TD>
+                  <TD><span className="text-[13px] font-semibold text-slate-900">{f.vehicle?.nameModel || f.vehicle?.registrationNumber || f.vehicleName}</span></TD>
+                  <TD><span className="text-[13px] font-semibold text-slate-900">{f.driver?.name || f.driver}</span></TD>
                   <TD><span className="text-[12px] text-slate-500">{f.date}</span></TD>
                   <TD><span className="text-[13px] text-slate-900 tabular-nums">{f.liters} L</span></TD>
                   <TD><span className="text-[12px] text-slate-600">{f.costPer}</span></TD>
-                  <TD><span className="text-[13px] font-bold text-slate-900">{f.total}</span></TD>
+                  <TD><span className="text-[13px] font-bold text-slate-900">${f.cost?.toFixed(2) || parseVal(f.total)}</span></TD>
                   <TD><span className="text-[11px] text-slate-400">{f.station}</span></TD>
                   <TD><span className="text-[11px] text-slate-400 tabular-nums">{f.odometer}</span></TD>
                 </tr>
@@ -2308,13 +2302,13 @@ function FuelScreen() {
             <tbody className="divide-y divide-slate-50">
               {expenses.map(e => (
                 <tr key={e.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TD><span className="text-[13px] font-semibold text-slate-900">{e.vehicleName}</span></TD>
+                  <TD><span className="text-[13px] font-semibold text-slate-900">{e.vehicle?.nameModel || e.vehicle?.registrationNumber || e.vehicleName}</span></TD>
                   <TD>
                     <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">{e.category}</span>
                   </TD>
                   <TD><span className="text-[12px] text-slate-500">{e.date}</span></TD>
                   <TD><span className="text-[12px] text-slate-700">{e.description}</span></TD>
-                  <TD><span className="text-[13px] font-bold text-slate-900">{e.amount}</span></TD>
+                  <TD><span className="text-[13px] font-bold text-slate-900">${e.amount?.toFixed?.(2) || parseVal(e.amount)}</span></TD>
                   <TD>
                     {e.receipt
                       ? <span className="text-[11px] text-emerald-600 flex items-center gap-1 font-medium"><CheckCircle size={11} />Yes</span>
@@ -2362,7 +2356,7 @@ function FuelScreen() {
             <Field label="Date"><input type="date" className={ic} value={fuelDate} onChange={e => setFuelDate(e.target.value)} /></Field>
             <Field label="Odometer Reading"><input type="number" className={ic} value={fuelOdometer} onChange={e => setFuelOdometer(e.target.value)} placeholder="0" min="0" /></Field>
           </div>
-          <Field label="Fuel Station"><input className={ic} value={fuelStation} onChange={e => setFuelStation(e.target.value)} placeholder="e.g. Shell ΓÇö Chicago, IL" /></Field>
+          <Field label="Fuel Station"><input className={ic} value={fuelStation} onChange={e => setFuelStation(e.target.value)} placeholder="e.g. Shell — Chicago, IL" /></Field>
           <div className="flex gap-3 pt-2">
             <button onClick={() => { setShowFuel(false); setFuelError(""); }} className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-medium hover:bg-slate-50">Cancel</button>
             <button onClick={handleSaveFuel} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold">Save Entry</button>
@@ -2410,12 +2404,13 @@ function FuelScreen() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ REPORTS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── REPORTS ─────────────────────────────────────────────────────────────────
 
 const tooltipStyle = { fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" };
 
 function ReportsScreen() {
   const { trips, vehicles, drivers, fuelLogs, expenses, maintenance } = useFleet();
+  const { kpis, exportCSV, isExporting } = useReports();
 
   const parseVal = (v: any) => {
     if (typeof v === "number") return v;
@@ -2424,11 +2419,11 @@ function ReportsScreen() {
 
   // KPIs
   const completedTrips = trips.filter(t => t.status === "completed");
-  const totalTripsCount = trips.length;
+  const totalTripsCount = kpis?.activeTrips || trips.length;
   const totalDistance = trips.reduce((sum, t) => sum + (parseFloat(t.distance) || 0), 0);
   
   // Total cost calculation
-  const totalFuelCost = fuelLogs.reduce((sum, f) => sum + parseVal(f.total), 0);
+  const totalFuelCost = fuelLogs.reduce((sum, f) => sum + parseVal(f.cost ?? f.total), 0);
   const totalOtherExpenses = expenses.reduce((sum, e) => sum + parseVal(e.amount), 0);
   const totalMaintCost = maintenance.reduce((sum, m) => sum + parseVal(m.cost), 0);
   const totalCost = totalFuelCost + totalOtherExpenses + totalMaintCost;
@@ -2486,42 +2481,11 @@ function ReportsScreen() {
     return d;
   });
 
-  // Handle Export CSV
-  const handleExportCSV = () => {
-    const lines = [
-      ["TransitOps Reports Summary", `Exported at: ${new Date().toLocaleDateString()}`],
-      [],
-      ["KPI Summary"],
-      ["Metric", "Value"],
-      ["Total Trips", totalTripsCount],
-      ["Total Distance (mi)", `${totalDistance} mi`],
-      ["Average Cost per Trip", `$${avgCostPerTrip}`],
-      ["Average Safety Score", avgSafetyScore],
-      [],
-      ["Vehicle ROI Breakdown"],
-      ["Registration Plate", "ROI (%)"],
-      ...dynamicRoiChartData.map(r => [r.vehicle, `${r.roi}%`]),
-      [],
-      ["Monthly Cost Breakdown"],
-      ["Month", "Fuel Cost ($)", "Maintenance Cost ($)", "Tolls & Other Cost ($)"],
-      ...dynamicOpCostChartData.map(d => [d.month, d.fuel.toFixed(2), d.maintenance.toFixed(2), d.tolls.toFixed(2)])
-    ];
-
-    const csvContent = "data:text/csv;charset=utf-8," + lines.map(e => e.map(val => `"${val}"`).join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `transitops_report_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
-        <button onClick={handleExportCSV} className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-[13px] font-medium rounded-xl hover:bg-slate-50 transition-colors">
-          <Download size={14} />Export CSV
+        <button onClick={() => exportCSV()} disabled={isExporting} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-semibold rounded-xl transition-all shadow-sm shadow-blue-600/20 whitespace-nowrap disabled:opacity-50">
+          <Download size={14} />{isExporting ? "Exporting..." : "Export CSV"}
         </button>
       </div>
 
@@ -2611,7 +2575,7 @@ function ReportsScreen() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ SETTINGS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── SETTINGS ────────────────────────────────────────────────────────────────
 
 function SettingsScreen() {
   const { currentUser, setCurrentUser, role, setRole } = useFleet();
@@ -2671,7 +2635,7 @@ function SettingsScreen() {
           <div>
             <p className="text-[15px] font-bold text-slate-900">{formFirst} {formLast}</p>
             <p className="text-[13px] text-slate-500">{currentUser.roleName}</p>
-            <button className="mt-1.5 text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors">Change avatar ΓåÆ</button>
+            <button className="mt-1.5 text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors">Change avatar →</button>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2741,7 +2705,7 @@ function SettingsScreen() {
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-50">
           <h3 className="text-[13px] font-semibold text-slate-900">Permission Matrix</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">Role-based access control ΓÇö configure what each role can do</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Role-based access control — configure what each role can do</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -2774,7 +2738,7 @@ function SettingsScreen() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ GATED ROUTE / ACCESS DENIED ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── GATED ROUTE / ACCESS DENIED ─────────────────────────────────────────────
 
 function AccessDenied() {
   return (
@@ -2791,7 +2755,7 @@ function AccessDenied() {
   );
 }
 
-// ΓöÇΓöÇΓöÇ APP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── APP ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardApp() {
   const [screen, setScreen] = useState<Screen>("dashboard");
