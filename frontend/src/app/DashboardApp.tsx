@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVehicles } from "./hooks/useVehicles";
 import { useDrivers } from "./hooks/useDrivers";
 import { useTrips } from "./hooks/useTrips";
+import { useMaintenance } from "./hooks/useMaintenance";
 import { authService } from "./services/authService";
 import {
   LayoutDashboard, Truck, Users, Wrench, Fuel, BarChart3, Settings,
@@ -1872,7 +1873,8 @@ function DispatchScreen() {
 // ─── MAINTENANCE ─────────────────────────────────────────────────────────────
 
 function MaintenanceScreen() {
-  const { vehicles, setVehicles, maintenance, setMaintenance, role } = useFleet();
+  const { vehicles, role } = useFleet();
+  const { maintenance, createMaintenance, closeMaintenance, isLoading } = useMaintenance();
   const [showForm, setShowForm] = useState(false);
 
   // Form states
@@ -1885,75 +1887,94 @@ function MaintenanceScreen() {
   const [formNotes, setFormNotes] = useState("");
   const [formError, setFormError] = useState("");
 
+  // Close modal states
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closingId, setClosingId] = useState("");
+  const [closingCost, setClosingCost] = useState("");
+  const [closingError, setClosingError] = useState("");
+
   const isReadOnly = role === "viewer";
 
   const handleSaveRecord = () => {
-    if (!formVehicle || !formType || !formTech || !formCost || !formStart || !formEnd) {
-      setFormError("All fields are required.");
+    if (!formVehicle || !formType || !formStart) {
+      setFormError("Vehicle, Type, and Start Date are required.");
       return;
     }
 
     const v = vehicles.find(veh => veh.id === formVehicle);
     if (!v) return;
 
-    if (v.status === "on-trip") {
-      setFormError(`Vehicle ${v.name} is currently on a trip and cannot be serviced yet.`);
+    if (v.status === "on_trip") {
+      setFormError(`Vehicle ${v.nameModel} is currently on a trip and cannot be serviced yet.`);
+      return;
+    }
+
+    if (v.status === "retired") {
+      setFormError(`Vehicle ${v.nameModel} is retired and cannot be serviced.`);
       return;
     }
 
     const costNum = parseFloat(formCost.replace(/[^0-9.]/g, "")) || 0;
 
-    const newRecord = {
-      id: `M-00${maintenance.length + 1}`,
-      vehicleId: v.id,
-      vehicleName: v.name,
-      type: formType,
-      technician: formTech,
-      start: formStart,
-      end: formEnd,
-      status: "in-progress",
-      cost: `$${costNum.toLocaleString()}`,
-      notes: formNotes,
-    };
-
-    setMaintenance([newRecord, ...maintenance]);
-    
-    // Set vehicle status to in-shop
-    setVehicles(prev => prev.map(veh => veh.id === v.id ? { ...veh, status: "in-shop" } : veh));
-
-    // Reset form
-    setShowForm(false);
-    setFormVehicle("");
-    setFormType("");
-    setFormTech("");
-    setFormCost("");
-    setFormStart("");
-    setFormEnd("");
-    setFormNotes("");
-    setFormError("");
+    createMaintenance(
+      {
+        vehicleId: v.id,
+        type: formType,
+        technician: formTech || undefined,
+        description: formNotes || "Routine Maintenance",
+        cost: costNum,
+        startDate: formStart,
+        expectedEndDate: formEnd || undefined,
+      },
+      {
+        onSuccess: () => {
+          setShowForm(false);
+          setFormVehicle("");
+          setFormType("");
+          setFormTech("");
+          setFormCost("");
+          setFormStart("");
+          setFormEnd("");
+          setFormNotes("");
+          setFormError("");
+        },
+        onError: (err: any) => {
+          setFormError(err.response?.data?.message || "Failed to create record");
+        },
+      }
+    );
   };
 
-  const handleCloseService = (id: string) => {
-    const record = maintenance.find(m => m.id === id);
-    if (!record) return;
+  const handleCloseService = (id: string, currentCost: number) => {
+    setClosingId(id);
+    setClosingCost(currentCost.toString());
+    setClosingError("");
+    setCloseModalOpen(true);
+  };
 
-    const finalCostInput = window.prompt("Enter final service cost ($):", record.cost.replace(/[^0-9.]/g, ""));
-    if (finalCostInput === null) return; // User cancelled
+  const confirmCloseService = () => {
+    const finalCost = parseFloat(closingCost) || 0;
 
-    const finalCost = parseFloat(finalCostInput) || 0;
-
-    // Update maintenance status
-    setMaintenance(prev => prev.map(m => m.id === id ? { ...m, status: "completed", cost: `$${finalCost.toLocaleString()}` } : m));
-
-    // Restore vehicle status to available
-    setVehicles(prev => prev.map(veh => veh.id === record.vehicleId ? { ...veh, status: "available" } : veh));
-
-    alert(`Service record ${id} marked completed.`);
+    closeMaintenance(
+      { id: closingId, cost: finalCost },
+      {
+        onSuccess: () => {
+          setCloseModalOpen(false);
+        },
+        onError: (err: any) => {
+          setClosingError(err.response?.data?.message || "Failed to close record");
+        },
+      }
+    );
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-end">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Maintenance Hub</h2>
+          <p className="text-[13px] text-slate-500 mt-1">Track vehicle service, repairs, and associated costs</p>
+        </div>
         <button onClick={() => {
           if (isReadOnly) {
             alert("Your role has read-only access. You do not have permission to log maintenance.");
@@ -1961,131 +1982,210 @@ function MaintenanceScreen() {
           }
           setShowForm(!showForm);
         }}
-          className={cn("flex items-center gap-2 px-4 py-2.5 text-white text-[13px] font-semibold rounded-xl transition-all shadow-sm whitespace-nowrap",
-            isReadOnly ? "bg-slate-300 cursor-not-allowed shadow-none" : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
+          className={cn("flex items-center gap-2 px-5 py-2.5 text-white text-[13.5px] font-semibold rounded-xl transition-all shadow-sm whitespace-nowrap",
+            isReadOnly ? "bg-slate-300 cursor-not-allowed shadow-none" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-600/25 hover:shadow-blue-600/40 transform hover:-translate-y-0.5"
           )}>
-          {isReadOnly ? <Shield size={14} /> : <Plus size={14} />}New Service Record
+          {isReadOnly ? <Shield size={16} /> : <Plus size={16} />}New Service Record
         </button>
       </div>
 
       {showForm && (
-        <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-[15px] font-semibold text-slate-900">Add Maintenance Record</h3>
-            <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-slate-100 rounded-lg"><X size={14} className="text-slate-500" /></button>
+        <div className="bg-white/80 backdrop-blur-md rounded-2xl border border-blue-100 shadow-xl shadow-blue-900/5 p-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-[16px] font-bold text-slate-900 flex items-center gap-2">
+              <Wrench size={18} className="text-blue-600" /> Add Maintenance Record
+            </h3>
+            <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"><X size={16} className="text-slate-500" /></button>
           </div>
           {formError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-[12px] text-red-600">
-              <AlertTriangle size={13} className="shrink-0" />
+            <div className="mb-5 p-3.5 bg-red-50/80 border border-red-100 rounded-xl flex items-center gap-2.5 text-[13px] font-medium text-red-700 shadow-sm animate-in fade-in">
+              <AlertTriangle size={15} className="shrink-0 text-red-500" />
               <span>{formError}</span>
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Field label="Vehicle">
-              <select className={ic} value={formVehicle} onChange={e => setFormVehicle(e.target.value)}>
+              <select className={cn(ic, "bg-slate-50 border-slate-200 focus:bg-white")} value={formVehicle} onChange={e => setFormVehicle(e.target.value)}>
                 <option value="">Select vehicle</option>
-                {vehicles.map(v => <option key={v.id} value={v.id}>{v.name} ({v.plate})</option>)}
+                {vehicles.filter(v => v.status !== "retired" && v.status !== "on_trip").map(v => (
+                  <option key={v.id} value={v.id}>{v.nameModel} ({v.registrationNumber})</option>
+                ))}
               </select>
             </Field>
             <Field label="Service Type">
-              <select className={ic} value={formType} onChange={e => setFormType(e.target.value)}>
+              <select className={cn(ic, "bg-slate-50 border-slate-200 focus:bg-white")} value={formType} onChange={e => setFormType(e.target.value)}>
                 <option value="">Select type</option>
                 {["Engine Repair", "Brake System", "Transmission", "Scheduled Service", "Tire Replacement", "Electrical", "Body Work", "Other"].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
-            <Field label="Technician"><input className={ic} placeholder="Technician name" value={formTech} onChange={e => setFormTech(e.target.value)} /></Field>
-            <Field label="Cost Estimate"><input className={ic} placeholder="$0.00" value={formCost} onChange={e => setFormCost(e.target.value)} /></Field>
-            <Field label="Start Date"><input type="date" className={ic} value={formStart} onChange={e => setFormStart(e.target.value)} /></Field>
-            <Field label="Estimated End Date"><input type="date" className={ic} value={formEnd} onChange={e => setFormEnd(e.target.value)} /></Field>
+            <Field label="Technician"><input className={cn(ic, "bg-slate-50 border-slate-200 focus:bg-white")} placeholder="Technician name" value={formTech} onChange={e => setFormTech(e.target.value)} /></Field>
+            <Field label="Cost Estimate"><input className={cn(ic, "bg-slate-50 border-slate-200 focus:bg-white")} placeholder="$0.00" value={formCost} onChange={e => setFormCost(e.target.value)} /></Field>
+            <Field label="Start Date"><input type="date" className={cn(ic, "bg-slate-50 border-slate-200 focus:bg-white")} value={formStart} onChange={e => setFormStart(e.target.value)} /></Field>
+            <Field label="Estimated End Date"><input type="date" className={cn(ic, "bg-slate-50 border-slate-200 focus:bg-white")} value={formEnd} onChange={e => setFormEnd(e.target.value)} /></Field>
             <div className="sm:col-span-2">
-              <Field label="Service Notes"><textarea className={cn(ic, "resize-none")} rows={3} placeholder="Describe service details…" value={formNotes} onChange={e => setFormNotes(e.target.value)} /></Field>
+              <Field label="Description"><textarea className={cn(ic, "resize-none bg-slate-50 border-slate-200 focus:bg-white")} rows={3} placeholder="Describe service details…" value={formNotes} onChange={e => setFormNotes(e.target.value)} /></Field>
             </div>
           </div>
-          <div className="flex justify-end gap-3 mt-4">
-            <button onClick={() => setShowForm(false)} className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
-            <button onClick={handleSaveRecord} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold transition-colors">Save Record</button>
+          <div className="flex justify-end gap-3 mt-6 pt-5 border-t border-slate-100">
+            <button onClick={() => setShowForm(false)} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-[13.5px] font-semibold hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm">Cancel</button>
+            <button onClick={handleSaveRecord} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13.5px] font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-2">
+              <Zap size={14} />Save Record
+            </button>
           </div>
         </div>
       )}
 
       {/* Active cards */}
       <div>
-        <h3 className="text-[12px] font-semibold text-slate-500 uppercase tracking-wide mb-3">Active & Scheduled</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {maintenance.filter(m => m.status !== "completed").map(m => (
-            <div key={m.id} className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className={cn("size-9 rounded-xl flex items-center justify-center", m.status === "in-progress" ? "bg-orange-100" : "bg-violet-100")}>
-                      <Wrench size={15} className={m.status === "in-progress" ? "text-orange-600" : "text-violet-600"} />
+        <h3 className="text-[12.5px] font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span> Active & Scheduled
+        </h3>
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[1, 2, 3].map(i => <div key={i} className="h-64 bg-slate-100 animate-pulse rounded-2xl"></div>)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {maintenance.filter(m => m.status === "active").map(m => (
+              <div key={m.id} className="bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md hover:border-blue-200/60 transition-all duration-300 p-5 flex flex-col justify-between group overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-orange-50 to-transparent rounded-bl-full opacity-50 -z-0"></div>
+                <div className="relative z-10">
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="size-11 rounded-xl bg-orange-100 flex items-center justify-center border border-orange-200/50 shadow-sm">
+                        <Wrench size={18} className="text-orange-600" />
+                      </div>
+                      <div>
+                        <p className="text-[14px] font-bold text-slate-900 leading-tight">{m.type}</p>
+                        <p className="text-[11px] font-mono text-slate-400 mt-0.5">{m.id.split('-')[0]}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[13px] font-bold text-slate-900">{m.type}</p>
-                      <p className="text-[10px] text-slate-400">{m.id}</p>
-                    </div>
+                    <StatusBadge status={m.status} />
                   </div>
-                  <StatusBadge status={m.status} />
+                  <div className="space-y-2.5">
+                    {[
+                      ["Vehicle", `${m.vehicle?.nameModel || 'Unknown'} (${m.vehicle?.registrationNumber || 'N/A'})`],
+                      ["Technician", m.technician || "Unassigned"],
+                      ["Start Date", new Date(m.startDate).toLocaleDateString()],
+                      ["Est. Completion", m.expectedEndDate ? new Date(m.expectedEndDate).toLocaleDateString() : "N/A"],
+                      ["Estimated Cost", `$${parseFloat(m.cost).toLocaleString(undefined, {minimumFractionDigits: 2})}`]
+                    ].map(([l, v]) => (
+                      <div key={l} className="flex items-center justify-between border-b border-slate-50 pb-1.5 last:border-0 last:pb-0">
+                        <span className="text-[12px] font-medium text-slate-500">{l}</span>
+                        <span className={cn("text-[12.5px] font-semibold text-slate-800", l === "Estimated Cost" && "text-slate-900")}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {m.description && <p className="mt-4 pt-3 border-t border-slate-100 text-[12px] text-slate-600 leading-relaxed italic line-clamp-2">"{m.description}"</p>}
                 </div>
-                <div className="space-y-2">
-                  {[["Vehicle", m.vehicleName], ["Technician", m.technician], ["Start Date", m.start], ["Est. Completion", m.end], ["Estimated Cost", m.cost]].map(([l, v]) => (
-                    <div key={l} className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">{l}</span>
-                      <span className={cn("text-[12px] font-medium text-slate-700", l === "Estimated Cost" && "font-bold text-slate-900")}>{v}</span>
-                    </div>
-                  ))}
-                </div>
-                {m.notes && <p className="mt-3 pt-3 border-t border-slate-50 text-[11px] text-slate-500 leading-relaxed">{m.notes}</p>}
+                {!isReadOnly && (
+                  <button onClick={() => handleCloseService(m.id, parseFloat(m.cost))} className="relative z-10 w-full mt-5 py-2.5 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 text-[13px] font-bold rounded-xl transition-all flex items-center justify-center gap-2">
+                    <CheckCircle size={15} className="opacity-70" /> Complete Service
+                  </button>
+                )}
               </div>
-              {!isReadOnly && (
-                <button onClick={() => handleCloseService(m.id)} className="w-full mt-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold rounded-lg transition-colors">
-                  Complete Service & Release Vehicle
-                </button>
-              )}
-            </div>
-          ))}
-          {maintenance.filter(m => m.status !== "completed").length === 0 && (
-            <p className="col-span-3 py-6 text-center text-[12px] text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">No active maintenance tasks scheduled.</p>
-          )}
-        </div>
+            ))}
+            {maintenance.filter(m => m.status === "active").length === 0 && (
+              <div className="col-span-1 md:col-span-2 lg:col-span-3 py-10 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                <div className="size-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                  <CheckCircle size={24} className="text-slate-400" />
+                </div>
+                <h4 className="text-[14px] font-bold text-slate-700">All caught up</h4>
+                <p className="text-[12.5px] text-slate-500 mt-1 max-w-sm">No active maintenance tasks scheduled. Your fleet is ready to roll.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* History table */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-50">
-          <h3 className="text-[13px] font-semibold text-slate-900">Service History</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-50 bg-slate-50/50">
-                <TH>ID</TH><TH>Vehicle</TH><TH>Service Type</TH><TH>Technician</TH><TH>Start Date</TH><TH>Status</TH><TH>Cost</TH>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {maintenance.map(m => (
-                <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TD><span className="text-[11px] font-mono text-slate-400">{m.id}</span></TD>
-                  <TD><span className="text-[13px] text-slate-700">{m.vehicleName}</span></TD>
-                  <TD><span className="text-[13px] font-semibold text-slate-900">{m.type}</span></TD>
-                  <TD><span className="text-[12px] text-slate-600">{m.technician}</span></TD>
-                  <TD><span className="text-[12px] text-slate-500">{m.start}</span></TD>
-                  <TD><StatusBadge status={m.status} /></TD>
-                  <TD><span className="text-[13px] font-bold text-slate-900">{m.cost}</span></TD>
+      <div>
+        <h3 className="text-[12.5px] font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2 mt-8">
+          <span className="w-2 h-2 rounded-full bg-slate-300"></span> Service History
+        </h3>
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left whitespace-nowrap">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/80">
+                  <TH>ID</TH><TH>Vehicle</TH><TH>Service Type</TH><TH>Technician</TH><TH>Start Date</TH><TH>Status</TH><TH>Cost</TH>
                 </tr>
-              ))}
-              {maintenance.length === 0 && (
-                <tr>
-                  <TD colSpan={7} className="text-center py-6 text-slate-400">No service history records found</TD>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoading ? (
+                  <tr><TD colSpan={7} className="text-center py-8"><div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div></TD></tr>
+                ) : maintenance.filter(m => m.status === "closed").map(m => (
+                  <tr key={m.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <TD><span className="text-[11px] font-mono text-slate-400 group-hover:text-slate-600 transition-colors">{m.id.split('-')[0]}</span></TD>
+                    <TD>
+                      <div className="flex flex-col">
+                        <span className="text-[13px] font-bold text-slate-800">{m.vehicle?.nameModel || 'Unknown'}</span>
+                        <span className="text-[11px] text-slate-500">{m.vehicle?.registrationNumber || 'N/A'}</span>
+                      </div>
+                    </TD>
+                    <TD><span className="text-[13px] font-semibold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-md">{m.type}</span></TD>
+                    <TD><span className="text-[12.5px] text-slate-600">{m.technician || '-'}</span></TD>
+                    <TD><span className="text-[12.5px] text-slate-600">{new Date(m.startDate).toLocaleDateString()}</span></TD>
+                    <TD><StatusBadge status={m.status} /></TD>
+                    <TD><span className="text-[13px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">${parseFloat(m.cost).toLocaleString(undefined, {minimumFractionDigits: 2})}</span></TD>
+                  </tr>
+                ))}
+                {!isLoading && maintenance.filter(m => m.status === "closed").length === 0 && (
+                  <tr>
+                    <TD colSpan={7} className="text-center py-10">
+                      <div className="flex flex-col items-center justify-center">
+                        <Wrench size={24} className="text-slate-300 mb-2" />
+                        <span className="text-[13px] font-medium text-slate-500">No service history records found</span>
+                      </div>
+                    </TD>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      {closeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5">
+              <h3 className="text-[16px] font-bold text-slate-900">Close Service Record</h3>
+              <p className="text-[13px] text-slate-500 mt-1">Enter the final service cost.</p>
+              
+              <div className="mt-4">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wide mb-1.5">Final Cost ($)</label>
+                <input
+                  type="number"
+                  value={closingCost}
+                  onChange={(e) => setClosingCost(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px] font-medium text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                  autoFocus
+                />
+              </div>
+
+              {closingError && (
+                <div className="mt-3 bg-red-50 text-red-600 text-[12px] font-medium p-3 rounded-lg border border-red-100 flex items-center gap-2">
+                  <AlertTriangle size={14} />{closingError}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 p-4 bg-slate-50 border-t border-slate-100">
+              <button onClick={() => setCloseModalOpen(false)} className="flex-1 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[13px] font-medium rounded-xl transition-colors">
+                Cancel
+              </button>
+              <button onClick={confirmCloseService} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all">
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
 
 // ─── FUEL & EXPENSES ─────────────────────────────────────────────────────────
 

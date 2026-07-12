@@ -133,6 +133,9 @@ async function main() {
   await prisma.maintenanceLog.create({
     data: {
       vehicleId: vehicle2.id,
+      type: 'Engine Repair',
+      technician: 'Mike Mechanic',
+      startDate: new Date(),
       description: 'Engine transmission rebuild',
       cost: 4500,
       status: MaintenanceStatus.active,
