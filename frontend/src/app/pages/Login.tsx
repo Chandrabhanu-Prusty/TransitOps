@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { apiFetch, ApiError } from '../../lib/api';
 import {
-  Truck, Lock, Mail, AlertCircle, Loader2, UserPlus, CheckCircle, User,
+  Truck, Lock, Mail, AlertCircle, Loader2,
 } from 'lucide-react';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -16,15 +16,7 @@ const loginSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-const createUserSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['fleet_manager', 'driver', 'safety_officer', 'financial_analyst']),
-});
-
 type LoginFormValues = z.infer<typeof loginSchema>;
-type CreateUserFormValues = z.infer<typeof createUserSchema>;
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
@@ -49,11 +41,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 function LoginForm() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [serverError, setServerError] = useState<string | null>(null);
-
-  const searchParams = new URLSearchParams(location.search);
-  const isExpired = searchParams.get('expired') === 'true';
 
   const {
     register,
@@ -83,12 +71,6 @@ function LoginForm() {
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-      {isExpired && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm text-center">
-          Your session has expired. Please log in again.
-        </div>
-      )}
-
       {serverError && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start text-sm">
           <AlertCircle className="w-5 h-5 mr-2 shrink-0" />
@@ -135,107 +117,9 @@ function LoginForm() {
   );
 }
 
-// ─── Create User Form ─────────────────────────────────────────────────────────
-
-function CreateUserForm() {
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<CreateUserFormValues>({
-    resolver: zodResolver(createUserSchema),
-    defaultValues: { role: 'driver' },
-  });
-
-  const onSubmit = async (data: CreateUserFormValues) => {
-    setServerError(null);
-    setSuccessMsg(null);
-    try {
-      await apiFetch('/auth/register', { method: 'POST', data });
-      setSuccessMsg(`User ${data.name} created successfully!`);
-      reset();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setServerError(err.message || 'Failed to create user');
-      } else {
-        setServerError('Something went wrong. Please try again.');
-      }
-    }
-  };
-
-  return (
-    <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-      {serverError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start text-sm">
-          <AlertCircle className="w-5 h-5 mr-2 shrink-0" />
-          <span>{serverError}</span>
-        </div>
-      )}
-
-      {successMsg && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-start text-sm">
-          <CheckCircle className="w-5 h-5 mr-2 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      <Field label="Full Name" error={errors.name?.message}>
-        <div className="relative">
-          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input type="text" {...register('name')} className={`${ic} pl-10`} placeholder="John Doe" />
-        </div>
-      </Field>
-
-      <Field label="Email Address" error={errors.email?.message}>
-        <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input type="email" {...register('email')} className={`${ic} pl-10`} placeholder="john@company.com" />
-        </div>
-      </Field>
-
-      <Field label="Password" error={errors.password?.message}>
-        <div className="relative">
-          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input type="password" {...register('password')} className={`${ic} pl-10`} placeholder="Min. 6 characters" />
-        </div>
-      </Field>
-
-      <Field label="System Role" error={errors.role?.message}>
-        <select {...register('role')} className={`${ic} bg-white`}>
-          <option value="driver">Driver</option>
-          <option value="safety_officer">Safety Officer</option>
-          <option value="financial_analyst">Financial Analyst</option>
-          <option value="fleet_manager">Fleet Manager</option>
-        </select>
-      </Field>
-
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold text-[14px] transition-all shadow-sm shadow-blue-600/25 hover:shadow-md hover:shadow-blue-600/25 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
-      >
-        {isSubmitting ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <>
-            <UserPlus className="w-4 h-4" />
-            Create User
-          </>
-        )}
-      </button>
-    </form>
-  );
-}
-
 // ─── Main Login Page ──────────────────────────────────────────────────────────
 
 export default function Login() {
-  const [tab, setTab] = useState<'login' | 'create'>('login');
-
   return (
     <div className="flex h-screen bg-white font-[Inter,sans-serif]">
       {/* ─── Left Branding Panel ─────────────────────────────────────── */}
@@ -376,44 +260,12 @@ export default function Login() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/60 p-8">
             {/* Header */}
             <div className="mb-6">
-              <h2 className="text-[22px] font-bold text-slate-900">
-                {tab === 'login' ? 'Welcome back' : 'Create New User'}
-              </h2>
-              <p className="text-[13px] text-slate-500 mt-1">
-                {tab === 'login'
-                  ? 'Sign in to your TransitOps account'
-                  : 'Add a new team member to the system'}
-              </p>
-            </div>
-
-            {/* Tab switcher */}
-            <div className="flex mb-6 bg-slate-100 rounded-xl p-1">
-              <button
-                onClick={() => setTab('login')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[13px] font-semibold transition-all ${
-                  tab === 'login'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <Mail size={14} />
-                Sign In
-              </button>
-              <button
-                onClick={() => setTab('create')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[13px] font-semibold transition-all ${
-                  tab === 'create'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <UserPlus size={14} />
-                Create User
-              </button>
+              <h2 className="text-[22px] font-bold text-slate-900">Welcome back</h2>
+              <p className="text-[13px] text-slate-500 mt-1">Sign in to your TransitOps account</p>
             </div>
 
             {/* Form */}
-            {tab === 'login' ? <LoginForm /> : <CreateUserForm />}
+            <LoginForm />
           </div>
 
           <p className="text-center text-[11px] text-slate-400 mt-5">

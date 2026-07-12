@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link, useLocation } from "react-router-dom";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVehicles } from "./hooks/useVehicles";
 import { useDrivers } from "./hooks/useDrivers";
@@ -17,7 +17,6 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import CreateUser from "./pages/CreateUser";
 import { useAuth } from "../lib/auth";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
@@ -388,10 +387,8 @@ const pageMeta: Record<Screen, { title: string; sub: string }> = {
   settings:    { title: "Settings & RBAC", sub: "Configure system settings and access control" },
 };
 
-// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
-
-function Sidebar({ collapsed, onToggle }: {
-  collapsed: boolean; onToggle: () => void;
+function Sidebar({ screen, setScreen, collapsed, onToggle }: {
+  screen: Screen; setScreen: (s: Screen) => void; collapsed: boolean; onToggle: () => void;
 }) {
   const { currentUser, role } = useFleet();
   const { user, logout } = useAuth();
@@ -429,10 +426,10 @@ function Sidebar({ collapsed, onToggle }: {
 
       {/* Nav */}
       <nav className="flex-1 py-3 overflow-y-auto px-2 space-y-0.5">
-        {allowedItems.map(({ id, label, Icon, path }) => {
-          const active = location.pathname === path;
+        {allowedItems.map(({ id, label, Icon }) => {
+          const active = screen === id;
           return (
-            <Link key={id} to={path} title={collapsed ? label : undefined}
+            <button key={id} onClick={() => setScreen(id)} title={collapsed ? label : undefined}
               className={cn(
                 "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 no-underline",
                 collapsed && "justify-center px-2",
@@ -440,7 +437,7 @@ function Sidebar({ collapsed, onToggle }: {
               )}>
               <Icon size={15} className="shrink-0" />
               {!collapsed && <span className="truncate">{label}</span>}
-            </Link>
+            </button>
           );
         })}
       </nav>
@@ -515,302 +512,7 @@ function TD({ children, className, colSpan }: { children?: React.ReactNode; clas
   return <td className={cn("px-5 py-3.5", className)} colSpan={colSpan}>{children}</td>;
 }
 
-// ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
-
-function AuthScreen() {
-  const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await authService.login(email, password);
-      navigate("/dashboard");
-    } catch (err: any) {
-      setError(err?.message ?? "Login failed. Please check your credentials.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="flex h-screen bg-white font-[Inter,sans-serif]">
-      {/* Left branding */}
-      <div className="hidden lg:flex w-[58%] flex-col relative overflow-hidden bg-slate-900">
-        {/* Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-blue-900" />
-        {/* Dot grid */}
-        <svg className="absolute inset-0 w-full h-full opacity-[0.15]">
-          <defs>
-            <pattern id="grid" x="0" y="0" width="36" height="36" patternUnits="userSpaceOnUse">
-              <circle cx="1.5" cy="1.5" r="1.5" fill="white" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-        {/* Glow orbs */}
-        <div className="absolute top-1/4 left-1/3 w-80 h-80 bg-blue-600/25 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-56 h-56 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col h-full px-12 py-10">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-xl shadow-blue-600/40">
-              <Truck size={20} className="text-white" />
-            </div>
-            <div>
-              <p className="text-[17px] font-bold text-white tracking-tight">TransitOps</p>
-              <p className="text-[11px] text-blue-300 leading-none">Smart Transport Platform</p>
-            </div>
-          </div>
-
-          {/* Hero text */}
-          <div className="flex-1 flex flex-col justify-center max-w-sm">
-            <h2 className="text-[42px] font-extrabold text-white leading-[1.1] tracking-tight mb-4">
-              Smarter fleet<br />operations,<br />at scale.
-            </h2>
-            <p className="text-blue-200 text-[15px] leading-relaxed mb-10">
-              Real-time tracking, driver compliance, and operational intelligence — unified in one enterprise platform.
-            </p>
-
-            {/* Fleet illustration */}
-            <svg viewBox="0 0 420 210" className="w-full mb-10">
-              {/* Road surface */}
-              <path d="M-10 175 Q210 145 430 175" stroke="rgba(255,255,255,0.07)" strokeWidth="54" fill="none" />
-              <path d="M-10 175 Q210 145 430 175" stroke="rgba(255,255,255,0.04)" strokeWidth="60" fill="none" />
-              {/* Road dashes */}
-              {[0,55,110,165,220,275,330,385].map(x => (
-                <line key={x} x1={x} y1={174} x2={x + 35} y2={172} stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeDasharray="28 12" />
-              ))}
-
-              {/* Truck 1 */}
-              <rect x="48" y="147" width="80" height="30" rx="5" fill="rgba(59,130,246,0.3)" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
-              <rect x="48" y="153" width="26" height="24" rx="4" fill="rgba(59,130,246,0.45)" />
-              <rect x="77" y="150" width="51" height="20" rx="2" fill="rgba(255,255,255,0.07)" />
-              <circle cx="66" cy="180" r="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
-              <circle cx="66" cy="180" r="4" fill="rgba(255,255,255,0.08)" />
-              <circle cx="112" cy="180" r="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
-              <circle cx="112" cy="180" r="4" fill="rgba(255,255,255,0.08)" />
-
-              {/* Truck 2 */}
-              <rect x="268" y="143" width="92" height="34" rx="5" fill="rgba(99,102,241,0.25)" stroke="rgba(255,255,255,0.13)" strokeWidth="1" />
-              <rect x="268" y="151" width="30" height="26" rx="4" fill="rgba(99,102,241,0.35)" />
-              <rect x="302" y="146" width="58" height="24" rx="2" fill="rgba(255,255,255,0.05)" />
-              <circle cx="287" cy="180" r="10" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
-              <circle cx="287" cy="180" r="4.5" fill="rgba(255,255,255,0.07)" />
-              <circle cx="338" cy="180" r="10" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
-              <circle cx="338" cy="180" r="4.5" fill="rgba(255,255,255,0.07)" />
-
-              {/* Pin A */}
-              <circle cx="88" cy="85" r="20" fill="rgba(59,130,246,0.2)" />
-              <circle cx="88" cy="85" r="11" fill="rgba(59,130,246,0.45)" />
-              <circle cx="88" cy="85" r="5" fill="rgba(255,255,255,0.85)" />
-              <line x1="88" y1="105" x2="88" y2="147" stroke="rgba(59,130,246,0.35)" strokeWidth="1.5" strokeDasharray="5 4" />
-
-              {/* Pin B */}
-              <circle cx="310" cy="62" r="20" fill="rgba(96,165,250,0.18)" />
-              <circle cx="310" cy="62" r="11" fill="rgba(96,165,250,0.38)" />
-              <circle cx="310" cy="62" r="5" fill="rgba(255,255,255,0.75)" />
-              <line x1="310" y1="82" x2="310" y2="143" stroke="rgba(96,165,250,0.28)" strokeWidth="1.5" strokeDasharray="5 4" />
-
-              {/* Route path */}
-              <path d="M108 85 Q200 45 290 62" stroke="rgba(148,197,253,0.45)" strokeWidth="1.5" strokeDasharray="7 5" fill="none" />
-
-              {/* Labels */}
-              <rect x="112" y="75" width="56" height="18" rx="4" fill="rgba(255,255,255,0.08)" />
-              <text x="140" y="87" fontSize="9" fill="rgba(255,255,255,0.7)" textAnchor="middle" fontFamily="Inter,sans-serif">Chicago, IL</text>
-              <rect x="272" y="50" width="62" height="18" rx="4" fill="rgba(255,255,255,0.08)" />
-              <text x="303" y="62" fontSize="9" fill="rgba(255,255,255,0.7)" textAnchor="middle" fontFamily="Inter,sans-serif">Detroit, MI</text>
-
-              {/* Speed dots */}
-              <circle cx="30" cy="25" r="3" fill="rgba(96,165,250,0.4)" />
-              <circle cx="200" cy="18" r="3" fill="rgba(96,165,250,0.3)" />
-              <circle cx="390" cy="30" r="3" fill="rgba(96,165,250,0.35)" />
-            </svg>
-
-            {/* Stats */}
-            <div className="flex gap-8">
-              {[{ v: "500+", l: "Enterprise Clients" }, { v: "12K+", l: "Vehicles Tracked" }, { v: "99.9%", l: "Platform Uptime" }].map(({ v, l }) => (
-                <div key={l}>
-                  <p className="text-[22px] font-extrabold text-white tabular-nums">{v}</p>
-                  <p className="text-[11px] text-blue-300 mt-0.5">{l}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Role pills */}
-          <div className="flex gap-3">
-            {[{ r: "Dispatcher", d: "Assign & track trips" }, { r: "Fleet Manager", d: "Full fleet oversight" }, { r: "Administrator", d: "System-wide control" }].map(({ r, d }) => (
-              <div key={r} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3.5 py-3">
-                <p className="text-[11px] font-semibold text-white">{r}</p>
-                <p className="text-[10px] text-blue-300 mt-0.5">{d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Right login */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-8">
-        <div className="w-full max-w-[340px]">
-          {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="size-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <Truck size={15} className="text-white" />
-            </div>
-            <span className="font-bold text-slate-900">TransitOps</span>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/60 p-8">
-            <div className="mb-7">
-              <h2 className="text-[22px] font-bold text-slate-900">Welcome back</h2>
-              <p className="text-[13px] text-slate-500 mt-1">Sign in to your TransitOps account</p>
-            </div>
-
-
-            <form onSubmit={handleLogin} className="space-y-4">
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-[13px] text-red-600 flex items-center gap-2">
-                  <AlertTriangle size={13} />
-                  {error}
-                </div>
-              )}
-              <Field label="Email address">
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={ic} placeholder="you@company.com" required />
-              </Field>
-              <Field label="Password">
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className={ic} placeholder="Enter your password" required />
-              </Field>
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
-                    className="size-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                  <span className="text-[13px] text-slate-600">Remember me</span>
-                </label>
-              </div>
-              <button type="submit" disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-semibold text-[14px] transition-all shadow-sm shadow-blue-600/25 hover:shadow-md hover:shadow-blue-600/25 active:scale-[0.99]">
-                {loading ? "Signing in…" : "Sign In to TransitOps"}
-              </button>
-              <p className="text-center text-[13px] text-slate-500">
-                Don't have an account?{" "}
-                <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">Create one</Link>
-              </p>
-            </form>
-          </div>
-          <p className="text-center text-[11px] text-slate-400 mt-5">SOC 2 Type II certified · Enterprise-grade security</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── REGISTER SCREEN ─────────────────────────────────────────────────────────
-
-function RegisterScreen() {
-  const navigate = useNavigate();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [role, setRoleField] = useState<"ADMIN" | "MANAGER" | "DISPATCHER">("DISPATCHER");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError("");
-    if (password !== confirm) { setError("Passwords do not match."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
-    setLoading(true);
-    try {
-      await authService.register(name, email, password, role);
-      navigate("/dashboard");
-    } catch (err: any) {
-      setError(err?.message ?? "Registration failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="flex h-screen bg-white font-[Inter,sans-serif]">
-      {/* Left branding panel (same as login) */}
-      <div className="hidden lg:flex w-[42%] flex-col relative overflow-hidden bg-slate-900">
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-blue-900" />
-        <div className="relative z-10 flex flex-col h-full p-10 justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="size-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/30">
-              <Truck size={17} className="text-white" />
-            </div>
-            <span className="text-[15px] font-bold text-white tracking-tight">TransitOps</span>
-          </div>
-          <div>
-            <h2 className="text-3xl font-bold text-white leading-tight">Join the fleet<br />management revolution.</h2>
-            <p className="text-[13px] text-blue-300 mt-3 max-w-xs leading-relaxed">Create your account to start managing vehicles, drivers, and trips in one powerful platform.</p>
-          </div>
-          <p className="text-[11px] text-slate-500">Trusted by 500+ enterprise fleets worldwide.</p>
-        </div>
-      </div>
-
-      {/* Right form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-8">
-        <div className="w-full max-w-[360px]">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/60 p-8">
-            <div className="mb-7">
-              <h2 className="text-[22px] font-bold text-slate-900">Create your account</h2>
-              <p className="text-[13px] text-slate-500 mt-1">Sign up for TransitOps</p>
-            </div>
-
-            <form onSubmit={handleRegister} className="space-y-4">
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-[13px] text-red-600 flex items-center gap-2">
-                  <AlertTriangle size={13} />
-                  {error}
-                </div>
-              )}
-              <Field label="Full name">
-                <input type="text" value={name} onChange={e => setName(e.target.value)} className={ic} placeholder="Jane Smith" required />
-              </Field>
-              <Field label="Email address">
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={ic} placeholder="you@company.com" required />
-              </Field>
-              <Field label="Password">
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className={ic} placeholder="Min. 6 characters" required />
-              </Field>
-              <Field label="Confirm password">
-                <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} className={ic} placeholder="Re-enter password" required />
-              </Field>
-              <Field label="Role">
-                <select value={role} onChange={e => setRoleField(e.target.value as any)} className={ic}>
-                  <option value="DISPATCHER">Dispatcher</option>
-                  <option value="MANAGER">Fleet Manager</option>
-                  <option value="ADMIN">Administrator</option>
-                </select>
-              </Field>
-              <button type="submit" disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-semibold text-[14px] transition-all shadow-sm shadow-blue-600/25 active:scale-[0.99]">
-                {loading ? "Creating account…" : "Create Account"}
-              </button>
-              <p className="text-center text-[13px] text-slate-500">
-                Already have an account?{" "}
-                <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">Sign in</Link>
-              </p>
-            </form>
-          </div>
-          <p className="text-center text-[11px] text-slate-400 mt-5">SOC 2 Type II certified · Enterprise-grade security</p>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ─── GATED ROUTE / ACCESS DENIED ─────────────────────────────────────────────
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
@@ -3102,20 +2804,20 @@ export default function DashboardApp() {
   const [role, setRole] = useState<"admin" | "manager" | "dispatcher" | "viewer">(roleNormalized);
   return (
     <FleetProvider role={role} setRole={setRole}>
-      <AppContent screen={screen} collapsed={collapsed} setCollapsed={setCollapsed} />
+      <AppContent screen={screen} setScreen={setScreen} collapsed={collapsed} setCollapsed={setCollapsed} />
     </FleetProvider>
   );
 }
 
-function AppContent({ screen, collapsed, setCollapsed }: {
-  screen: Screen; collapsed: boolean; setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+function AppContent({ screen, setScreen, collapsed, setCollapsed }: {
+  screen: Screen; setScreen: (s: Screen) => void; collapsed: boolean; setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const { user } = useAuth();
   const role = user?.role;
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-[Inter,sans-serif]">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
+      <Sidebar screen={screen} setScreen={setScreen} collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav screen={screen} />
         <main className="flex-1 overflow-auto p-5 lg:p-6">
