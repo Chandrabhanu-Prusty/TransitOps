@@ -25,7 +25,7 @@ interface Driver {
   vehicle: string | null;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
 
 interface HealthResponse {
   status: string;
@@ -665,7 +665,7 @@ function DashboardScreen({
   const [statusFilter, setStatusFilter] = useState("");
   const [regionFilter, setRegionFilter] = useState("");
 
-  const { data: kpiData, refetch } = useQuery({
+  const { data: kpiData, refetch: refetchKPIs } = useQuery({
     queryKey: ["dashboardKPIs", typeFilter, statusFilter, regionFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -684,6 +684,25 @@ function DashboardScreen({
       return json.data;
     }
   });
+
+  const { data: realTrips, refetch: refetchTrips } = useQuery({
+    queryKey: ["dashboardTrips"],
+    queryFn: async () => {
+      const headers: Record<string, string> = {};
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+      const res = await fetch(`${API_BASE}/api/trips`, { headers });
+      if (!res.ok) throw new Error("Failed to fetch trips");
+      const json = await res.json();
+      return json.data;
+    }
+  });
+
+  const refetchAll = () => {
+    refetchKPIs();
+    refetchTrips();
+  };
 
   const hasData = kpiData !== undefined;
   const activeVehicles = hasData ? kpiData.activeVehicles : 3;
@@ -738,6 +757,34 @@ function DashboardScreen({
     }
   }
 
+  // Map trips and apply mock info fallback matching properties
+  const displayTrips = (realTrips && realTrips.length > 0)
+    ? realTrips.map((t: any) => ({
+        id: t.id,
+        origin: t.source,
+        destination: t.destination,
+        driver: t.driver?.name || "Unknown",
+        cargo: t.cargoWeight ? `${t.cargoWeight} kg` : "—",
+        status: t.status,
+        cost: t.revenue ? `$${t.revenue.toFixed(2)}` : "—",
+        vehicleType: t.vehicle?.type,
+        vehicleStatus: t.vehicle?.status,
+        region: t.vehicle?.region
+      }))
+    : tripsData.map((t: any, idx: number) => ({
+        ...t,
+        vehicleType: idx % 3 === 0 ? "Van" : idx % 3 === 1 ? "Box Truck" : "Flatbed",
+        vehicleStatus: idx % 2 === 0 ? "available" : "on_trip",
+        region: idx % 2 === 0 ? "North Depot" : "East Depot"
+      }));
+
+  const filteredTrips = displayTrips.filter((t: any) => {
+    if (typeFilter && t.vehicleType !== typeFilter) return false;
+    if (statusFilter && t.vehicleStatus !== statusFilter) return false;
+    if (regionFilter && t.region !== regionFilter) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -745,7 +792,7 @@ function DashboardScreen({
           <Calendar size={13} />
           <span>January 15, 2025 — Last updated 2 mins ago</span>
         </div>
-        <button onClick={() => refetch()}
+        <button onClick={refetchAll}
           className="flex items-center gap-1.5 text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors">
           <RefreshCw size={12} />Refresh
         </button>
@@ -831,7 +878,7 @@ function DashboardScreen({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {tripsData.map(t => (
+                    {filteredTrips.map((t: any) => (
                       <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
                         <TD><span className="text-[11px] font-mono font-medium text-slate-500">{t.id}</span></TD>
                         <TD>
