@@ -29,6 +29,10 @@ export const useMaintenance = () => {
     mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/maintenance/${id}`, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
   });
+  const close = useMutation({
+    mutationFn: ({ id, cost }: { id: string; cost: number }) => api.patch(`/maintenance/${id}/close`, { cost }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
+  });
   const del = useMutation({
     mutationFn: (id: string) => api.delete(`/maintenance/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
@@ -39,6 +43,7 @@ export const useMaintenance = () => {
     isError,
     createMaintenance: create.mutate,
     updateMaintenance: update.mutate,
+    closeMaintenance: close.mutate,
     deleteMaintenance: del.mutate,
   };
 };

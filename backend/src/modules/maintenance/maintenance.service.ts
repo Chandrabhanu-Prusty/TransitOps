@@ -15,13 +15,24 @@ export class MaintenanceService {
       throw new AppError('Cannot log maintenance for a retired vehicle', 400)
     }
 
+    const existingActive = await prisma.maintenanceLog.findFirst({
+      where: { vehicleId: input.vehicleId, status: MaintenanceStatus.active },
+    });
+    if (existingActive) {
+      throw new AppError('This vehicle already has an active maintenance record', 400);
+    }
+
     return prisma.$transaction(async (tx) => {
       // 1. Create Maintenance Log
       const log = await tx.maintenanceLog.create({
         data: {
           vehicleId: input.vehicleId,
+          type: input.type,
+          technician: input.technician,
           description: input.description,
           cost: input.cost,
+          startDate: input.startDate,
+          expectedEndDate: input.expectedEndDate,
           status: MaintenanceStatus.active,
           createdById: userId,
         },
