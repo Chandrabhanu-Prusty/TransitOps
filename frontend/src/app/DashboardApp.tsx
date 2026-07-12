@@ -12,6 +12,19 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 
+interface Driver {
+  id: string;
+  name: string;
+  phone: string;
+  license: string;
+  licenseNumber: string;
+  expiry: string;
+  safetyScore: number;
+  status: string;
+  trips: number;
+  vehicle: string | null;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
 
 interface HealthResponse {
@@ -28,7 +41,7 @@ async function fetchHealth(): Promise<HealthResponse> {
 }
 
 function HealthBadge() {
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["health"],
     queryFn: fetchHealth,
     retry: 3,
@@ -94,13 +107,13 @@ const vehicles = [
 ];
 
 const driversData = [
-  { id: "D-001", name: "James Mitchell", phone: "+1 555-0123", license: "CDL-A", expiry: "2025-08-15", safetyScore: 94, status: "on-duty", trips: 234, vehicle: "V-001" },
-  { id: "D-002", name: "Sarah Chen", phone: "+1 555-0124", license: "CDL-A", expiry: "2026-03-22", safetyScore: 98, status: "on-duty", trips: 312, vehicle: "V-002" },
-  { id: "D-003", name: "Marcus Johnson", phone: "+1 555-0125", license: "CDL-B", expiry: "2025-11-30", safetyScore: 87, status: "available", trips: 189, vehicle: null },
-  { id: "D-004", name: "Elena Rodriguez", phone: "+1 555-0126", license: "CDL-A", expiry: "2025-04-10", safetyScore: 91, status: "on-duty", trips: 267, vehicle: "V-005" },
-  { id: "D-005", name: "David Okafor", phone: "+1 555-0127", license: "CDL-A", expiry: "2026-07-18", safetyScore: 96, status: "on-duty", trips: 445, vehicle: "V-008" },
-  { id: "D-006", name: "Lisa Park", phone: "+1 555-0128", license: "CDL-B", expiry: "2025-02-28", safetyScore: 89, status: "off-duty", trips: 156, vehicle: null },
-  { id: "D-007", name: "Robert Torres", phone: "+1 555-0129", license: "CDL-A", expiry: "2025-09-05", safetyScore: 77, status: "available", trips: 98, vehicle: null },
+  { id: "D-001", name: "James Mitchell", phone: "+1 555-0123", license: "CDL-A", licenseNumber: "DL-992348", expiry: "2025-08-15", safetyScore: 94, status: "on-duty", trips: 234, vehicle: "V-001" },
+  { id: "D-002", name: "Sarah Chen", phone: "+1 555-0124", license: "CDL-A", licenseNumber: "DL-773412", expiry: "2026-03-22", safetyScore: 98, status: "on-duty", trips: 312, vehicle: "V-002" },
+  { id: "D-003", name: "Marcus Johnson", phone: "+1 555-0125", license: "CDL-B", licenseNumber: "DL-112233", expiry: "2025-11-30", safetyScore: 87, status: "available", trips: 189, vehicle: null },
+  { id: "D-004", name: "Elena Rodriguez", phone: "+1 555-0126", license: "CDL-A", licenseNumber: "DL-445566", expiry: "2025-04-10", safetyScore: 91, status: "on-duty", trips: 267, vehicle: "V-005" },
+  { id: "D-005", name: "David Okafor", phone: "+1 555-0127", license: "CDL-A", licenseNumber: "DL-223344", expiry: "2026-07-18", safetyScore: 96, status: "on-duty", trips: 445, vehicle: "V-008" },
+  { id: "D-006", name: "Lisa Park", phone: "+1 555-0128", license: "CDL-B", licenseNumber: "DL-556677", expiry: "2025-02-28", safetyScore: 89, status: "off-duty", trips: 156, vehicle: null },
+  { id: "D-007", name: "Robert Torres", phone: "+1 555-0129", license: "CDL-A", licenseNumber: "DL-889900", expiry: "2025-09-05", safetyScore: 77, status: "available", trips: 98, vehicle: null },
 ];
 
 const tripsData = [
@@ -197,17 +210,7 @@ function SafetyBadge({ score }: { score: number }) {
   return <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums", cls)}>{score}<span className="font-normal text-current opacity-50 ml-0.5">/100</span></span>;
 }
 
-function ExpiryBadge({ expiry }: { expiry: string }) {
-  const days = Math.ceil((new Date(expiry).getTime() - TODAY.getTime()) / 86400000);
-  const formatted = new Date(expiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const cls = days > 90 ? "text-slate-600" : days > 30 ? "text-amber-600" : "text-red-600";
-  return (
-    <span className={cn("text-xs font-medium", cls)}>
-      {days <= 30 && <AlertTriangle size={10} className="inline mr-1" />}
-      {formatted}
-    </span>
-  );
-}
+// ExpiryBadge removed
 
 function KPICard({ label, value, icon: Icon, trend, trendValue, color }: {
   label: string; value: string | number; icon: React.ElementType;
@@ -313,8 +316,9 @@ const pageMeta: Record<Screen, { title: string; sub: string }> = {
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
 
-function Sidebar({ current, onNav, collapsed, onToggle }: {
+function Sidebar({ current, onNav, collapsed, onToggle, userName, userRole }: {
   current: Screen; onNav: (s: Screen) => void; collapsed: boolean; onToggle: () => void;
+  userName: string; userRole: string;
 }) {
   return (
     <aside className={cn(
@@ -356,10 +360,10 @@ function Sidebar({ current, onNav, collapsed, onToggle }: {
       <div className="border-t border-slate-800 p-2 space-y-1 shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-2.5 px-2 py-2">
-            <Avatar name="Alex Kumar" />
+            <Avatar name={userName} />
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-slate-200 truncate leading-none">Alex Kumar</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">Fleet Admin</p>
+              <p className="text-[12px] font-semibold text-slate-200 truncate leading-none">{userName}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{userRole === "fleet_manager" ? "Fleet Manager" : "Driver / Dispatcher"}</p>
             </div>
             <button className="p-1 hover:bg-slate-800 rounded transition-colors">
               <LogOut size={12} className="text-slate-500" />
@@ -379,7 +383,7 @@ function Sidebar({ current, onNav, collapsed, onToggle }: {
 
 // ─── TOP NAV ─────────────────────────────────────────────────────────────────
 
-function TopNav({ screen }: { screen: Screen }) {
+function TopNav({ screen, userName }: { screen: Screen; userName: string }) {
   const { title, sub } = pageMeta[screen];
   return (
     <header className="h-[60px] bg-white border-b border-slate-100 flex items-center px-6 gap-4 shrink-0">
@@ -399,8 +403,8 @@ function TopNav({ screen }: { screen: Screen }) {
           <span className="absolute top-1.5 right-1.5 size-1.5 bg-red-500 rounded-full" />
         </button>
         <button className="flex items-center gap-2 pl-2.5 pr-2 py-1.5 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
-          <Avatar name="Alex Kumar" />
-          <span className="text-[13px] font-medium text-slate-700 hidden md:block">Alex Kumar</span>
+          <Avatar name={userName} />
+          <span className="text-[13px] font-medium text-slate-700 hidden md:block">{userName}</span>
           <ChevronDown size={11} className="text-slate-400" />
         </button>
       </div>
@@ -410,7 +414,7 @@ function TopNav({ screen }: { screen: Screen }) {
 
 // ─── TABLE HEADER ────────────────────────────────────────────────────────────
 
-function TH({ children }: { children: React.ReactNode }) {
+function TH({ children }: { children?: React.ReactNode }) {
   return (
     <th className="px-5 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap">
       {children}
@@ -424,11 +428,30 @@ function TD({ children, className }: { children: React.ReactNode; className?: st
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 
-function AuthScreen({ onLogin }: { onLogin: () => void }) {
+function AuthScreen({ onLogin }: { onLogin: (role: "fleet_manager" | "safety_officer" | "driver" | "financial_analyst", name: string) => void }) {
   const [email, setEmail] = useState("admin@transitops.com");
   const [password, setPassword] = useState("Password1234");
   const [remember, setRemember] = useState(true);
   const [demoRole, setDemoRole] = useState<"admin" | "manager" | "dispatcher">("admin");
+
+  const handleLogin = () => {
+    let finalRole: "fleet_manager" | "safety_officer" | "driver" | "financial_analyst" = "fleet_manager";
+    let finalName = "Alex Kumar";
+
+    if (demoRole === "manager") {
+      finalRole = "fleet_manager";
+      finalName = "Alice Fleet Manager";
+    } else if (demoRole === "dispatcher") {
+      finalRole = "driver";
+      finalName = "Bob Driver User";
+    } else {
+      // admin
+      finalRole = "fleet_manager";
+      finalName = "Alex Kumar";
+    }
+
+    onLogin(finalRole, finalName);
+  };
 
   return (
     <div className="flex h-screen bg-white font-[Inter,sans-serif]">
@@ -594,7 +617,7 @@ function AuthScreen({ onLogin }: { onLogin: () => void }) {
                 </label>
                 <button className="text-[13px] text-blue-600 hover:text-blue-700 font-medium transition-colors">Forgot password?</button>
               </div>
-              <button onClick={onLogin}
+              <button onClick={handleLogin}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold text-[14px] transition-all shadow-sm shadow-blue-600/25 hover:shadow-md hover:shadow-blue-600/25 active:scale-[0.99]">
                 Sign In to TransitOps
               </button>
@@ -609,14 +632,15 @@ function AuthScreen({ onLogin }: { onLogin: () => void }) {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
-function DashboardScreen() {
+function DashboardScreen({ drivers }: { drivers: Driver[] }) {
+  const activeDriversCount = drivers.filter(d => d.status === "on-duty").length;
   const kpis = [
     { label: "Active Vehicles", value: 3, icon: Truck, trend: "up" as const, trendValue: "+1 from yesterday", color: "bg-blue-600" },
     { label: "Available Vehicles", value: 3, icon: CheckCircle, trend: "neutral" as const, trendValue: "Ready to dispatch", color: "bg-emerald-500" },
     { label: "In Maintenance", value: 2, icon: Wrench, trend: "neutral" as const, trendValue: "1 completing today", color: "bg-orange-500" },
     { label: "Active Trips", value: 3, icon: Navigation, trend: "up" as const, trendValue: "All on schedule", color: "bg-blue-600" },
     { label: "Pending Trips", value: 1, icon: Clock, trend: "neutral" as const, trendValue: "Awaiting dispatch", color: "bg-amber-500" },
-    { label: "Drivers On Duty", value: 4, icon: Users, trend: "up" as const, trendValue: "+1 vs last shift", color: "bg-indigo-500" },
+    { label: "Drivers On Duty", value: activeDriversCount, icon: Users, trend: "up" as const, trendValue: "+1 vs last shift", color: "bg-indigo-500" },
     { label: "Fleet Utilization", value: "75%", icon: Activity, trend: "up" as const, trendValue: "+3% this week", color: "bg-violet-500" },
   ];
 
@@ -804,7 +828,7 @@ function VehiclesScreen() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-50 bg-slate-50/50">
-                <TH>ID</TH><TH>Name & Model</TH><TH>Type</TH><TH>Plate</TH><TH>Year</TH><TH>Status</TH><TH>Mileage</TH><TH>Last Service</TH><TH></TH>
+                <TH>ID</TH><TH>Name & Model</TH><TH>Type</TH><TH>Plate</TH><TH>Year</TH><TH>Status</TH><TH>Mileage</TH><TH>Last Service</TH><TH> </TH>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -869,17 +893,189 @@ function VehiclesScreen() {
 
 // ─── DRIVERS ─────────────────────────────────────────────────────────────────
 
-function DriversScreen() {
+function DriversScreen({ 
+  drivers, 
+  setDrivers, 
+  userRole 
+}: { 
+  drivers: Driver[]; 
+  setDrivers: React.Dispatch<React.SetStateAction<Driver[]>>; 
+  userRole: string; 
+}) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  
+  // Modals state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  
+  // Form states
+  const [formName, setFormName] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formLicense, setFormLicense] = useState("CDL-A");
+  const [formLicenseNumber, setFormLicenseNumber] = useState("");
+  const [formExpiry, setFormExpiry] = useState("");
+  const [formSafetyScore, setFormSafetyScore] = useState(100);
+  const [formStatus, setFormStatus] = useState("available");
+  const [formVehicle, setFormVehicle] = useState<string>("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const list = driversData.filter(d =>
+  // RBAC checks
+  const canModify = userRole === "fleet_manager" || userRole === "safety_officer";
+
+  // Filter list
+  const list = drivers.filter(d =>
     (filter === "all" || d.status === filter) &&
     d.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  // License Expiry indicators helpers
+  const getLicenseStatus = (expiryDateStr: string) => {
+    const days = Math.ceil((new Date(expiryDateStr).getTime() - TODAY.getTime()) / 86400000);
+    if (days <= 0) return { label: "Expired", cls: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" };
+    if (days <= 30) return { label: "Expiring Soon", cls: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" };
+    return { label: "Valid", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" };
+  };
+
+  // Reset form helper
+  const resetForm = () => {
+    setFormName("");
+    setFormPhone("");
+    setFormLicense("CDL-A");
+    setFormLicenseNumber("");
+    setFormExpiry("");
+    setFormSafetyScore(100);
+    setFormStatus("available");
+    setFormVehicle("");
+    setErrors({});
+  };
+
+  // Open add modal
+  const handleOpenAdd = () => {
+    resetForm();
+    setShowAddModal(true);
+  };
+
+  // Handle create driver
+  const handleCreate = () => {
+    const newErrors: Record<string, string> = {};
+    if (!formName.trim()) newErrors.name = "Name is required";
+    if (!formPhone.trim()) newErrors.phone = "Phone number is required";
+    if (!formLicenseNumber.trim()) newErrors.licenseNumber = "License number is required";
+    if (!formExpiry) newErrors.expiry = "Expiry date is required";
+
+    // Unique check
+    const isDuplicate = drivers.some(d => d.licenseNumber.toLowerCase() === formLicenseNumber.trim().toLowerCase());
+    if (isDuplicate) {
+      newErrors.licenseNumber = "A driver with this license number already exists";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    const newDriver: Driver = {
+      id: `D-${Math.floor(100 + Math.random() * 900)}`,
+      name: formName.trim(),
+      phone: formPhone.trim(),
+      license: formLicense,
+      licenseNumber: formLicenseNumber.trim(),
+      expiry: formExpiry,
+      safetyScore: Number(formSafetyScore),
+      status: formStatus,
+      trips: 0,
+      vehicle: formVehicle || null
+    };
+
+    setDrivers([newDriver, ...drivers]);
+    setShowAddModal(false);
+    resetForm();
+  };
+
+  // Populate form for editing
+  const handleOpenEdit = (d: Driver) => {
+    setSelectedDriver(d);
+    setFormName(d.name);
+    setFormPhone(d.phone);
+    setFormLicense(d.license);
+    setFormLicenseNumber(d.licenseNumber);
+    setFormExpiry(d.expiry);
+    setFormSafetyScore(d.safetyScore);
+    setFormStatus(d.status);
+    setFormVehicle(d.vehicle || "");
+    setErrors({});
+    setIsEditMode(true);
+    setShowDetailModal(true);
+  };
+
+  const handleOpenView = (d: Driver) => {
+    setSelectedDriver(d);
+    setIsEditMode(false);
+    setShowDetailModal(true);
+  };
+
+  // Handle edit driver
+  const handleUpdate = () => {
+    if (!selectedDriver) return;
+
+    const newErrors: Record<string, string> = {};
+    if (!formName.trim()) newErrors.name = "Name is required";
+    if (!formPhone.trim()) newErrors.phone = "Phone number is required";
+    if (!formLicenseNumber.trim()) newErrors.licenseNumber = "License number is required";
+    if (!formExpiry) newErrors.expiry = "Expiry date is required";
+
+    // Unique check (excluding the driver being edited)
+    const isDuplicate = drivers.some(d => d.id !== selectedDriver.id && d.licenseNumber.toLowerCase() === formLicenseNumber.trim().toLowerCase());
+    if (isDuplicate) {
+      newErrors.licenseNumber = "A driver with this license number already exists";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setDrivers(drivers.map(d => d.id === selectedDriver.id ? {
+      ...d,
+      name: formName.trim(),
+      phone: formPhone.trim(),
+      license: formLicense,
+      licenseNumber: formLicenseNumber.trim(),
+      expiry: formExpiry,
+      safetyScore: Number(formSafetyScore),
+      status: formStatus,
+      vehicle: formVehicle || null
+    } : d));
+
+    setShowDetailModal(false);
+    setSelectedDriver(null);
+  };
+
+  // Handle delete driver
+  const handleDelete = (id: string) => {
+    const driver = drivers.find(d => d.id === id);
+    if (!driver) return;
+    
+    // Business rule: Prevent deletion if driver is active
+    if (driver.status === "on-trip" || driver.status === "on-duty") {
+      alert(`Cannot delete a driver who is currently ${driver.status.replace("-", " ")}.`);
+      return;
+    }
+
+    if (confirm(`Are you sure you want to delete driver ${driver.name}?`)) {
+      setDrivers(drivers.filter(d => d.id !== id));
+      if (selectedDriver?.id === id) {
+        setShowDetailModal(false);
+      }
+    }
+  };
+
   return (
     <div className="space-y-5">
+      {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -892,67 +1088,288 @@ function DriversScreen() {
           <option value="on-duty">On Duty</option>
           <option value="available">Available</option>
           <option value="off-duty">Off Duty</option>
+          <option value="suspended">Suspended</option>
         </select>
-        <button className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-semibold rounded-xl transition-all shadow-sm shadow-blue-600/20">
-          <Plus size={14} />Add Driver
-        </button>
+        {canModify && (
+          <button onClick={handleOpenAdd}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[13px] font-semibold rounded-xl transition-all shadow-sm shadow-blue-600/20 whitespace-nowrap">
+            <Plus size={14} />Add Driver
+          </button>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-50">
-          <p className="text-[13px] font-medium text-slate-600">{list.length} driver{list.length !== 1 ? "s" : ""}</p>
+      {/* Table & Empty State */}
+      {list.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-12 text-center max-w-lg mx-auto space-y-4">
+          <div className="size-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto">
+            <Users size={32} className="text-slate-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">No Drivers Found</h3>
+            <p className="text-sm text-slate-500 mt-1">There are no drivers registered in the fleet, or no drivers match your search filters.</p>
+          </div>
+          {canModify && (
+            <button onClick={handleOpenAdd}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">
+              Add a Driver
+            </button>
+          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-50 bg-slate-50/50">
-                <TH>Driver</TH><TH>Phone</TH><TH>License</TH><TH>Expiry</TH><TH>Safety Score</TH><TH>Status</TH><TH>Total Trips</TH><TH>Assigned Vehicle</TH><TH></TH>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {list.map(d => (
-                <tr key={d.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <TD>
-                    <div className="flex items-center gap-3">
-                      <Avatar name={d.name} />
-                      <div>
-                        <p className="text-[13px] font-semibold text-slate-900">{d.name}</p>
-                        <p className="text-[10px] text-slate-400">{d.id}</p>
-                      </div>
-                    </div>
-                  </TD>
-                  <TD><span className="text-[12px] text-slate-600">{d.phone}</span></TD>
-                  <TD>
-                    <span className="text-[11px] font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{d.license}</span>
-                  </TD>
-                  <TD><ExpiryBadge expiry={d.expiry} /></TD>
-                  <TD><SafetyBadge score={d.safetyScore} /></TD>
-                  <TD><StatusBadge status={d.status} /></TD>
-                  <TD><span className="text-[13px] font-bold text-slate-900 tabular-nums">{d.trips}</span></TD>
-                  <TD>
-                    {d.vehicle
-                      ? <span className="text-[11px] font-mono font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{d.vehicle}</span>
-                      : <span className="text-[12px] text-slate-300">—</span>}
-                  </TD>
-                  <TD>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 hover:bg-blue-50 rounded-lg"><Eye size={12} className="text-blue-600" /></button>
-                      <button className="p-1.5 hover:bg-slate-100 rounded-lg"><Edit2 size={12} className="text-slate-500" /></button>
-                    </div>
-                  </TD>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-50">
+            <p className="text-[13px] font-medium text-slate-600">{list.length} driver{list.length !== 1 ? "s" : ""}</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-50 bg-slate-50/50">
+                  <TH>Driver</TH><TH>Phone</TH><TH>License Category</TH><TH>License Number</TH><TH>License Status</TH><TH>Safety Score</TH><TH>Status</TH><TH>Total Trips</TH><TH>Assigned Vehicle</TH><TH> </TH>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {list.map(d => {
+                  const licStatus = getLicenseStatus(d.expiry);
+                  return (
+                    <tr key={d.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <TD>
+                        <div className="flex items-center gap-3">
+                          <Avatar name={d.name} />
+                          <div>
+                            <p className="text-[13px] font-semibold text-slate-900">{d.name}</p>
+                            <p className="text-[10px] text-slate-400">{d.id}</p>
+                          </div>
+                        </div>
+                      </TD>
+                      <TD><span className="text-[12px] text-slate-600">{d.phone}</span></TD>
+                      <TD>
+                        <span className="text-[11px] font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{d.license}</span>
+                      </TD>
+                      <TD>
+                        <span className="text-[12px] font-mono font-medium text-slate-600">{d.licenseNumber}</span>
+                      </TD>
+                      <TD>
+                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border", licStatus.cls)}>
+                          <span className={cn("size-1.5 rounded-full shrink-0", licStatus.dot)} />
+                          {licStatus.label}
+                        </span>
+                      </TD>
+                      <TD><SafetyBadge score={d.safetyScore} /></TD>
+                      <TD><StatusBadge status={d.status} /></TD>
+                      <TD><span className="text-[13px] font-bold text-slate-900 tabular-nums">{d.trips}</span></TD>
+                      <TD>
+                        {d.vehicle
+                          ? <span className="text-[11px] font-mono font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{d.vehicle}</span>
+                          : <span className="text-[12px] text-slate-300">—</span>}
+                      </TD>
+                      <TD>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => handleOpenView(d)} className="p-1.5 hover:bg-blue-50 rounded-lg"><Eye size={12} className="text-blue-600" /></button>
+                          {canModify && (
+                            <>
+                              <button onClick={() => handleOpenEdit(d)} className="p-1.5 hover:bg-slate-100 rounded-lg"><Edit2 size={12} className="text-slate-500" /></button>
+                              <button onClick={() => handleDelete(d.id)} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 size={12} className="text-red-500" /></button>
+                            </>
+                          )}
+                        </div>
+                      </TD>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Add Modal */}
+      <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Add New Driver">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Driver Name" error={errors.name}>
+              <input className={ic} placeholder="Full Name" value={formName} onChange={e => setFormName(e.target.value)} />
+            </Field>
+            <Field label="Phone/Contact" error={errors.phone}>
+              <input className={ic} placeholder="+1 555-xxxx" value={formPhone} onChange={e => setFormPhone(e.target.value)} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="License Category">
+              <select className={ic} value={formLicense} onChange={e => setFormLicense(e.target.value)}>
+                <option value="CDL-A">Class A CDL (CDL-A)</option>
+                <option value="CDL-B">Class B CDL (CDL-B)</option>
+                <option value="Standard">Standard License</option>
+              </select>
+            </Field>
+            <Field label="License Number" error={errors.licenseNumber}>
+              <input className={ic} placeholder="DL-xxxxxx" value={formLicenseNumber} onChange={e => setFormLicenseNumber(e.target.value)} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="License Expiry Date" error={errors.expiry}>
+              <input type="date" className={ic} value={formExpiry} onChange={e => setFormExpiry(e.target.value)} />
+            </Field>
+            <Field label="Safety Score">
+              <input type="number" className={ic} min="0" max="100" value={formSafetyScore} onChange={e => setFormSafetyScore(Number(e.target.value))} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Driver Status">
+              <select className={ic} value={formStatus} onChange={e => setFormStatus(e.target.value)}>
+                <option value="available">Available</option>
+                <option value="on-duty">On Duty</option>
+                <option value="off-duty">Off Duty</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </Field>
+            <Field label="Assigned Vehicle (optional)">
+              <select className={ic} value={formVehicle} onChange={e => setFormVehicle(e.target.value)}>
+                <option value="">None</option>
+                {vehicles.map(v => <option key={v.id} value={v.id}>{v.name} ({v.plate})</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-slate-200 text-slate-705 rounded-xl text-[13px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+            <button onClick={handleCreate} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold transition-colors">Add Driver</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* View Detail & Edit Modal */}
+      {selectedDriver && (
+        <Modal open={showDetailModal} onClose={() => { setShowDetailModal(false); setSelectedDriver(null); }} title={isEditMode ? "Edit Driver Details" : "Driver Details"}>
+          <div className="space-y-4">
+            {isEditMode ? (
+              // Edit Mode
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Driver Name" error={errors.name}>
+                    <input className={ic} value={formName} onChange={e => setFormName(e.target.value)} />
+                  </Field>
+                  <Field label="Phone/Contact" error={errors.phone}>
+                    <input className={ic} value={formPhone} onChange={e => setFormPhone(e.target.value)} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="License Category">
+                    <select className={ic} value={formLicense} onChange={e => setFormLicense(e.target.value)}>
+                      <option value="CDL-A">Class A CDL (CDL-A)</option>
+                      <option value="CDL-B">Class B CDL (CDL-B)</option>
+                      <option value="Standard">Standard License</option>
+                    </select>
+                  </Field>
+                  <Field label="License Number" error={errors.licenseNumber}>
+                    <input className={ic} value={formLicenseNumber} onChange={e => setFormLicenseNumber(e.target.value)} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="License Expiry Date" error={errors.expiry}>
+                    <input type="date" className={ic} value={formExpiry} onChange={e => setFormExpiry(e.target.value)} />
+                  </Field>
+                  <Field label="Safety Score">
+                    <input type="number" className={ic} min="0" max="100" value={formSafetyScore} onChange={e => setFormSafetyScore(Number(e.target.value))} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Driver Status">
+                    <select className={ic} value={formStatus} onChange={e => setFormStatus(e.target.value)}>
+                      <option value="available">Available</option>
+                      <option value="on-duty">On Duty</option>
+                      <option value="off-duty">Off Duty</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  </Field>
+                  <Field label="Assigned Vehicle">
+                    <select className={ic} value={formVehicle} onChange={e => setFormVehicle(e.target.value)}>
+                      <option value="">None</option>
+                      {vehicles.map(v => <option key={v.id} value={v.id}>{v.name} ({v.plate})</option>)}
+                    </select>
+                  </Field>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => setIsEditMode(false)} className="flex-1 py-2.5 border border-slate-200 text-slate-705 rounded-xl text-[13px] font-medium hover:bg-slate-50 transition-colors">Cancel Edit</button>
+                  <button onClick={handleUpdate} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold transition-colors">Save Changes</button>
+                </div>
+              </>
+            ) : (
+              // Details/Read-Only Mode
+              <>
+                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <Avatar name={selectedDriver.name} size="lg" />
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900">{selectedDriver.name}</h4>
+                    <p className="text-xs text-slate-400 font-medium">ID: {selectedDriver.id}</p>
+                    <div className="mt-1.5 flex gap-2">
+                      <StatusBadge status={selectedDriver.status} />
+                      <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border", getLicenseStatus(selectedDriver.expiry).cls)}>
+                        {getLicenseStatus(selectedDriver.expiry).label}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">License Category</p>
+                    <p className="text-sm font-semibold text-slate-700 mt-0.5">{selectedDriver.license}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">License Number</p>
+                    <p className="text-sm font-semibold text-slate-700 mt-0.5 font-mono">{selectedDriver.licenseNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Expiration Date</p>
+                    <p className="text-sm font-semibold text-slate-700 mt-0.5">
+                      {new Date(selectedDriver.expiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Safety Rating</p>
+                    <div className="mt-0.5">
+                      <SafetyBadge score={selectedDriver.safetyScore} />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Assigned Vehicle</p>
+                    <p className="text-sm font-semibold text-slate-700 mt-0.5">
+                      {selectedDriver.vehicle ? selectedDriver.vehicle : "None"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Contact Number</p>
+                    <p className="text-sm font-semibold text-slate-700 mt-0.5">{selectedDriver.phone}</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Performance</span>
+                    <p className="text-sm font-bold text-slate-700 mt-0.5">{selectedDriver.trips} trips completed</p>
+                  </div>
+                  {canModify && (
+                    <div className="flex gap-2">
+                      <button onClick={() => setIsEditMode(true)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors">
+                        <Edit2 size={11} />Edit
+                      </button>
+                      <button onClick={() => handleDelete(selectedDriver.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded-lg transition-colors">
+                        <Trash2 size={11} />Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 // ─── DISPATCH ────────────────────────────────────────────────────────────────
 
-function DispatchScreen() {
+function DispatchScreen({ drivers }: { drivers: Driver[] }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ origin: "", destination: "", cargoType: "", weight: "", distance: "", notes: "", vehicleId: "", driverId: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -979,10 +1396,10 @@ function DispatchScreen() {
   };
 
   const availVeh = vehicles.filter(v => v.status === "available");
-  const availDrv = driversData.filter(d => d.status === "available");
+  const availDrv = drivers.filter(d => d.status === "available");
 
   const selVeh = vehicles.find(v => v.id === form.vehicleId);
-  const selDrv = driversData.find(d => d.id === form.driverId);
+  const selDrv = drivers.find(d => d.id === form.driverId);
 
   const stepDot = (n: number) => cn(
     "size-8 rounded-full flex items-center justify-center text-[13px] font-bold shrink-0 transition-all",
@@ -1559,8 +1976,14 @@ function ReportsScreen() {
 
 // ─── SETTINGS ────────────────────────────────────────────────────────────────
 
-function SettingsScreen() {
-  const [profile, setProfile] = useState({ first: "Alex", last: "Kumar", email: "alex.kumar@transitops.com", phone: "+1 555-0100", dept: "Fleet Operations" });
+function SettingsScreen({ userName, userRole }: { userName: string; userRole: string }) {
+  const [profile, setProfile] = useState({
+    first: userName.split(" ")[0] || "Alex",
+    last: userName.split(" ").slice(1).join(" ") || "Kumar",
+    email: `${(userName.split(" ")[0] || "alex").toLowerCase()}@transitops.com`,
+    phone: "+1 555-0100",
+    dept: userRole === "fleet_manager" ? "Fleet Operations" : "Dispatch Team"
+  });
   const setP = (k: string, v: string) => setProfile(p => ({ ...p, [k]: v }));
 
   const roles = [
@@ -1582,6 +2005,8 @@ function SettingsScreen() {
     "Fuel & Expenses":      [true,  true,  true,  false],
   };
 
+  const initials = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+
   return (
     <div className="space-y-5 max-w-4xl">
       {/* Profile */}
@@ -1589,11 +2014,11 @@ function SettingsScreen() {
         <h3 className="text-[14px] font-semibold text-slate-900 mb-5">User Profile</h3>
         <div className="flex items-center gap-5 mb-6">
           <div className="size-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0">
-            <span className="text-xl font-extrabold text-white">AK</span>
+            <span className="text-xl font-extrabold text-white">{initials}</span>
           </div>
           <div>
-            <p className="text-[15px] font-bold text-slate-900">Alex Kumar</p>
-            <p className="text-[13px] text-slate-500">Fleet Administrator</p>
+            <p className="text-[15px] font-bold text-slate-900">{userName}</p>
+            <p className="text-[13px] text-slate-500">{userRole === "fleet_manager" ? "Fleet Manager" : "Driver / Dispatcher"}</p>
             <button className="mt-1.5 text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors">Change avatar →</button>
           </div>
         </div>
@@ -1606,7 +2031,7 @@ function SettingsScreen() {
           <Field label="System Role">
             <div className={cn(ic, "flex items-center gap-2 bg-slate-50 cursor-not-allowed select-none")}>
               <Shield size={13} className="text-blue-600" />
-              <span className="text-slate-700 font-medium">Administrator</span>
+              <span className="text-slate-700 font-medium">{userRole === "fleet_manager" ? "Fleet Manager" : "Driver / Dispatcher"}</span>
               <span className="ml-auto text-[10px] text-slate-400">Managed by org</span>
             </div>
           </Field>
@@ -1701,25 +2126,43 @@ function SettingsScreen() {
 export default function App() {
   const [screen, setScreen] = useState<Screen>("auth");
   const [collapsed, setCollapsed] = useState(false);
+  const [userRole, setUserRole] = useState<"fleet_manager" | "safety_officer" | "driver" | "financial_analyst">("fleet_manager");
+  const [userName, setUserName] = useState("Alex Kumar");
+  const [drivers, setDrivers] = useState<Driver[]>(driversData);
 
   if (screen === "auth") {
-    return <AuthScreen onLogin={() => setScreen("dashboard")} />;
+    return (
+      <AuthScreen
+        onLogin={(role, name) => {
+          setUserRole(role);
+          setUserName(name);
+          setScreen("dashboard");
+        }}
+      />
+    );
   }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-[Inter,sans-serif]">
-      <Sidebar current={screen} onNav={setScreen} collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
+      <Sidebar
+        current={screen}
+        onNav={setScreen}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((c) => !c)}
+        userName={userName}
+        userRole={userRole}
+      />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <TopNav screen={screen} />
+        <TopNav screen={screen} userName={userName} />
         <main className="flex-1 overflow-auto p-5 lg:p-6">
-          {screen === "dashboard"   && <DashboardScreen />}
+          {screen === "dashboard"   && <DashboardScreen drivers={drivers} />}
           {screen === "vehicles"    && <VehiclesScreen />}
-          {screen === "drivers"     && <DriversScreen />}
-          {screen === "dispatch"    && <DispatchScreen />}
+          {screen === "drivers"     && <DriversScreen drivers={drivers} setDrivers={setDrivers} userRole={userRole} />}
+          {screen === "dispatch"    && <DispatchScreen drivers={drivers} />}
           {screen === "maintenance" && <MaintenanceScreen />}
           {screen === "fuel"        && <FuelScreen />}
           {screen === "reports"     && <ReportsScreen />}
-          {screen === "settings"    && <SettingsScreen />}
+          {screen === "settings"    && <SettingsScreen userName={userName} userRole={userRole} />}
         </main>
       </div>
     </div>
