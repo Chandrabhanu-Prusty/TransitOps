@@ -52,15 +52,15 @@ export class ReportsService {
     })
 
     return vehicles.map((vehicle) => {
-      const fuelCost = vehicle.fuelLogs.reduce((sum, log) => sum + log.cost, 0)
-      const maintenanceCost = vehicle.maintenances.reduce((sum, log) => sum + log.cost, 0)
-      const miscExpense = vehicle.expenses.reduce((sum, exp) => sum + exp.amount, 0)
+      const fuelCost = vehicle.fuelLogs.reduce((sum, log) => sum + Number(log.cost), 0)
+      const maintenanceCost = vehicle.maintenances.reduce((sum, log) => sum + Number(log.cost), 0)
+      const miscExpense = vehicle.expenses.reduce((sum, exp) => sum + Number(exp.amount), 0)
       const totalOpCost = fuelCost + maintenanceCost + miscExpense
 
-      const revenue = vehicle.trips.reduce((sum, trip) => sum + (trip.revenue || 0), 0)
-      const totalDistance = vehicle.trips.reduce((sum, trip) => sum + trip.plannedDistance, 0)
+      const revenue = vehicle.trips.reduce((sum, trip) => sum + Number(trip.revenue || 0), 0)
+      const totalDistance = vehicle.trips.reduce((sum, trip) => sum + Number(trip.plannedDistance), 0)
       const totalFuelConsumed = vehicle.trips.reduce(
-        (sum, trip) => sum + (trip.fuelConsumed || 0),
+        (sum, trip) => sum + Number(trip.fuelConsumed || 0),
         0,
       )
 
@@ -70,8 +70,8 @@ export class ReportsService {
 
       // ROI: (Revenue - OpCost) / AcquisitionCost
       const roi =
-        vehicle.acquisitionCost > 0
-          ? parseFloat(((revenue - totalOpCost) / vehicle.acquisitionCost).toFixed(4))
+        Number(vehicle.acquisitionCost) > 0
+          ? parseFloat(((revenue - totalOpCost) / Number(vehicle.acquisitionCost)).toFixed(4))
           : 0
 
       return {
