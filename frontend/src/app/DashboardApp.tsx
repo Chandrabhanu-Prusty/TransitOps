@@ -428,29 +428,51 @@ function TD({ children, className }: { children: React.ReactNode; className?: st
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 
-function AuthScreen({ onLogin }: { onLogin: (role: "fleet_manager" | "safety_officer" | "driver" | "financial_analyst", name: string) => void }) {
+function AuthScreen({ onLogin }: { onLogin: (role: "fleet_manager" | "safety_officer" | "driver" | "financial_analyst", name: string, token?: string) => void }) {
   const [email, setEmail] = useState("admin@transitops.com");
   const [password, setPassword] = useState("Password1234");
   const [remember, setRemember] = useState(true);
   const [demoRole, setDemoRole] = useState<"admin" | "manager" | "dispatcher">("admin");
 
-  const handleLogin = () => {
-    let finalRole: "fleet_manager" | "safety_officer" | "driver" | "financial_analyst" = "fleet_manager";
-    let finalName = "Alex Kumar";
+  const handleLogin = async () => {
+    let finalEmail = "manager@transitops.com";
+    let finalPassword = "Password123";
 
     if (demoRole === "manager") {
-      finalRole = "fleet_manager";
-      finalName = "Alice Fleet Manager";
+      finalEmail = "manager@transitops.com";
     } else if (demoRole === "dispatcher") {
-      finalRole = "driver";
-      finalName = "Bob Driver User";
+      finalEmail = "driver@transitops.com";
     } else {
-      // admin
-      finalRole = "fleet_manager";
-      finalName = "Alex Kumar";
+      // admin matches safety officer or manager
+      finalEmail = "manager@transitops.com";
     }
 
-    onLogin(finalRole, finalName);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: finalEmail, password: finalPassword }),
+      });
+      const data = await res.json();
+      if (data.status === "success" && data.data?.token) {
+        onLogin(data.data.user.role, data.data.user.name, data.data.token);
+      } else {
+        alert("Login failed: " + (data.message || "Unknown error"));
+      }
+    } catch (err) {
+      console.warn("Backend auth failed, falling back to design mock mode:", err);
+      // Fallback
+      let finalRole: "fleet_manager" | "safety_officer" | "driver" | "financial_analyst" = "fleet_manager";
+      let finalName = "Alex Kumar";
+      if (demoRole === "manager") {
+        finalRole = "fleet_manager";
+        finalName = "Alice Fleet Manager";
+      } else if (demoRole === "dispatcher") {
+        finalRole = "driver";
+        finalName = "Bob Driver User";
+      }
+      onLogin(finalRole, finalName);
+    }
   };
 
   return (
@@ -632,23 +654,89 @@ function AuthScreen({ onLogin }: { onLogin: (role: "fleet_manager" | "safety_off
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
-function DashboardScreen({ drivers }: { drivers: Driver[] }) {
-  const activeDriversCount = drivers.filter(d => d.status === "on-duty").length;
+function DashboardScreen({ 
+  authToken, 
+  onNav 
+}: { 
+  authToken: string | null; 
+  onNav: (s: Screen) => void; 
+}) {
+  const [typeFilter, setTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+
+  const { data: kpiData, refetch } = useQuery({
+    queryKey: ["dashboardKPIs", typeFilter, statusFilter, regionFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (typeFilter) params.append("type", typeFilter);
+      if (statusFilter) params.append("status", statusFilter);
+      if (regionFilter) params.append("region", regionFilter);
+
+      const headers: Record<string, string> = {};
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+
+      const res = await fetch(`${API_BASE}/api/reports/kpis?${params.toString()}`, { headers });
+      if (!res.ok) throw new Error("Failed to fetch KPIs");
+      const json = await res.json();
+      return json.data;
+    }
+  });
+
+  const hasData = kpiData !== undefined;
+  const activeVehicles = hasData ? kpiData.activeVehicles : 3;
+  const availableVehicles = hasData ? kpiData.availableVehicles : 3;
+  const vehiclesInMaintenance = hasData ? kpiData.vehiclesInMaintenance : 2;
+  const activeTrips = hasData ? kpiData.activeTrips : 3;
+  const pendingTrips = hasData ? kpiData.pendingTrips : 1;
+  const driversOnDuty = hasData ? kpiData.driversOnDuty : 4;
+  const fleetUtilization = hasData ? kpiData.fleetUtilization : 75;
+
+  const totalVehicles = activeVehicles + availableVehicles + vehiclesInMaintenance;
+  const showEmptyState = hasData && totalVehicles === 0 && activeTrips === 0 && pendingTrips === 0 && driversOnDuty === 0;
+
   const kpis = [
-    { label: "Active Vehicles", value: 3, icon: Truck, trend: "up" as const, trendValue: "+1 from yesterday", color: "bg-blue-600" },
-    { label: "Available Vehicles", value: 3, icon: CheckCircle, trend: "neutral" as const, trendValue: "Ready to dispatch", color: "bg-emerald-500" },
-    { label: "In Maintenance", value: 2, icon: Wrench, trend: "neutral" as const, trendValue: "1 completing today", color: "bg-orange-500" },
-    { label: "Active Trips", value: 3, icon: Navigation, trend: "up" as const, trendValue: "All on schedule", color: "bg-blue-600" },
-    { label: "Pending Trips", value: 1, icon: Clock, trend: "neutral" as const, trendValue: "Awaiting dispatch", color: "bg-amber-500" },
-    { label: "Drivers On Duty", value: activeDriversCount, icon: Users, trend: "up" as const, trendValue: "+1 vs last shift", color: "bg-indigo-500" },
-    { label: "Fleet Utilization", value: "75%", icon: Activity, trend: "up" as const, trendValue: "+3% this week", color: "bg-violet-500" },
+    { label: "Active Vehicles", value: activeVehicles, icon: Truck, trend: "up" as const, trendValue: "+1 from yesterday", color: "bg-blue-600" },
+    { label: "Available Vehicles", value: availableVehicles, icon: CheckCircle, trend: "neutral" as const, trendValue: "Ready to dispatch", color: "bg-emerald-500" },
+    { label: "In Maintenance", value: vehiclesInMaintenance, icon: Wrench, trend: "neutral" as const, trendValue: "1 completing today", color: "bg-orange-500" },
+    { label: "Active Trips", value: activeTrips, icon: Navigation, trend: "up" as const, trendValue: "All on schedule", color: "bg-blue-600" },
+    { label: "Pending Trips", value: pendingTrips, icon: Clock, trend: "neutral" as const, trendValue: "Awaiting dispatch", color: "bg-amber-500" },
+    { label: "Drivers On Duty", value: driversOnDuty, icon: Users, trend: "up" as const, trendValue: "+1 vs last shift", color: "bg-indigo-500" },
+    { label: "Fleet Utilization", value: `${fleetUtilization}%`, icon: Activity, trend: "up" as const, trendValue: "+3% this week", color: "bg-violet-500" },
   ];
 
-  const util = [
+  let displayUtil = [
     { label: "Heavy Trucks", total: 5, active: 3, color: "bg-blue-500" },
     { label: "Medium Trucks", total: 2, active: 1, color: "bg-indigo-500" },
     { label: "Light Vans", total: 1, active: 0, color: "bg-violet-500" },
   ];
+
+  if (hasData) {
+    if (typeFilter === "Van") {
+      displayUtil = [
+        { label: "Light Vans", total: totalVehicles, active: activeVehicles, color: "bg-violet-500" }
+      ];
+    } else if (typeFilter === "Box Truck") {
+      const halfTotal = Math.ceil(totalVehicles / 2);
+      const halfActive = Math.ceil(activeVehicles / 2);
+      displayUtil = [
+        { label: "Heavy Trucks", total: halfTotal, active: halfActive, color: "bg-blue-500" },
+        { label: "Medium Trucks", total: totalVehicles - halfTotal, active: activeVehicles - halfActive, color: "bg-indigo-500" }
+      ];
+    } else if (typeFilter === "Flatbed") {
+      displayUtil = [
+        { label: "Flatbed Trailers", total: totalVehicles, active: activeVehicles, color: "bg-blue-500" }
+      ];
+    } else {
+      displayUtil = [
+        { label: "Heavy Trucks", total: Math.min(totalVehicles, 5), active: Math.min(activeVehicles, 3), color: "bg-blue-500" },
+        { label: "Medium Trucks", total: Math.max(0, Math.min(totalVehicles - 5, 2)), active: Math.max(0, Math.min(activeVehicles - 3, 1)), color: "bg-indigo-500" },
+        { label: "Light Vans", total: Math.max(0, totalVehicles - 7), active: Math.max(0, activeVehicles - 4), color: "bg-violet-500" }
+      ];
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -657,109 +745,168 @@ function DashboardScreen({ drivers }: { drivers: Driver[] }) {
           <Calendar size={13} />
           <span>January 15, 2025 — Last updated 2 mins ago</span>
         </div>
-        <button className="flex items-center gap-1.5 text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors">
+        <button onClick={() => refetch()}
+          className="flex items-center gap-1.5 text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors">
           <RefreshCw size={12} />Refresh
         </button>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
-        {kpis.map(kpi => <KPICard key={kpi.label} {...kpi} />)}
+      {/* Filters Panel */}
+      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Vehicle Type</label>
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+            className="w-full px-3 py-2 text-[13px] border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer">
+            <option value="">All Types</option>
+            <option value="Van">Van</option>
+            <option value="Box Truck">Box Truck</option>
+            <option value="Flatbed">Flatbed</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Vehicle Status</label>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="w-full px-3 py-2 text-[13px] border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer">
+            <option value="">All Statuses</option>
+            <option value="available">Available</option>
+            <option value="on_trip">On Trip</option>
+            <option value="in_shop">In Maintenance</option>
+            <option value="retired">Retired</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Region</label>
+          <select value={regionFilter} onChange={e => setRegionFilter(e.target.value)}
+            className="w-full px-3 py-2 text-[13px] border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer">
+            <option value="">All Regions</option>
+            <option value="North Depot">North Depot</option>
+            <option value="East Depot">East Depot</option>
+          </select>
+        </div>
       </div>
 
-      {/* Main grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {/* Trips table */}
-        <div className="xl:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-50">
-            <div>
-              <h3 className="text-[13px] font-semibold text-slate-900">Recent Trips</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Latest 7 trip records</p>
-            </div>
-            <button className="text-[12px] text-blue-600 hover:text-blue-700 font-medium">View all →</button>
+      {showEmptyState ? (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-12 text-center max-w-lg mx-auto space-y-4 my-10">
+          <div className="size-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto">
+            <Activity size={32} className="text-slate-400" />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-50 bg-slate-50/60">
-                  <TH>Trip ID</TH><TH>Route</TH><TH>Driver</TH><TH>Cargo</TH><TH>Status</TH><TH>Cost</TH>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {tripsData.map(t => (
-                  <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
-                    <TD><span className="text-[11px] font-mono font-medium text-slate-500">{t.id}</span></TD>
-                    <TD>
-                      <div className="flex items-center gap-1 text-[12px] text-slate-700">
-                        <MapPin size={9} className="text-slate-400 shrink-0" />
-                        <span className="font-medium truncate max-w-[80px]">{t.origin}</span>
-                        <ArrowRight size={9} className="text-slate-300 shrink-0" />
-                        <span className="truncate max-w-[80px]">{t.destination}</span>
-                      </div>
-                    </TD>
-                    <TD><span className="text-[12px] text-slate-700">{t.driver}</span></TD>
-                    <TD><span className="text-[12px] text-slate-500">{t.cargo}</span></TD>
-                    <TD><StatusBadge status={t.status} /></TD>
-                    <TD><span className="text-[12px] font-semibold text-slate-900">{t.cost}</span></TD>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">No fleet data yet</h3>
+            <p className="text-sm text-slate-500 mt-1">There are no vehicles or drivers registered in the fleet matching the selected filters.</p>
+          </div>
+          <div className="flex justify-center gap-3 mt-4">
+            <button onClick={() => onNav("vehicles")}
+              className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 transition-colors">
+              Add Vehicle
+            </button>
+            <button onClick={() => onNav("drivers")}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">
+              Add Driver
+            </button>
           </div>
         </div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
+            {kpis.map(kpi => <KPICard key={kpi.label} {...kpi} />)}
+          </div>
 
-        {/* Right column */}
-        <div className="space-y-4">
-          {/* Utilization */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-            <h3 className="text-[13px] font-semibold text-slate-900 mb-4">Fleet Utilization</h3>
+          {/* Main grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            {/* Trips table */}
+            <div className="xl:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-50">
+                <div>
+                  <h3 className="text-[13px] font-semibold text-slate-900">Recent Trips</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Latest 7 trip records</p>
+                </div>
+                <button onClick={() => onNav("dispatch")} className="text-[12px] text-blue-600 hover:text-blue-700 font-medium">View all →</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-50 bg-slate-50/60">
+                      <TH>Trip ID</TH><TH>Route</TH><TH>Driver</TH><TH>Cargo</TH><TH>Status</TH><TH>Cost</TH>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {tripsData.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                        <TD><span className="text-[11px] font-mono font-medium text-slate-500">{t.id}</span></TD>
+                        <TD>
+                          <div className="flex items-center gap-1 text-[12px] text-slate-700">
+                            <MapPin size={9} className="text-slate-400 shrink-0" />
+                            <span className="font-medium truncate max-w-[80px]">{t.origin}</span>
+                            <ArrowRight size={9} className="text-slate-300 shrink-0" />
+                            <span className="truncate max-w-[80px]">{t.destination}</span>
+                          </div>
+                        </TD>
+                        <TD><span className="text-[12px] text-slate-700">{t.driver}</span></TD>
+                        <TD><span className="text-[12px] text-slate-500">{t.cargo}</span></TD>
+                        <TD><StatusBadge status={t.status} /></TD>
+                        <TD><span className="text-[12px] font-semibold text-slate-900">{t.cost}</span></TD>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Right column */}
             <div className="space-y-4">
-              {util.map(({ label, total, active, color }) => (
-                <div key={label}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[12px] font-medium text-slate-600">{label}</span>
-                    <span className="text-[11px] text-slate-400 tabular-nums">{active}/{total}</span>
-                  </div>
-                  <ProgressBar value={active} max={total} color={color} />
-                  <p className="text-right mt-1 text-[10px] text-slate-400">{total === 0 ? "0" : Math.round((active / total) * 100)}%</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Today glance */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-            <h3 className="text-[13px] font-semibold text-slate-900 mb-3.5">Today at a Glance</h3>
-            <div className="space-y-3">
-              {[
-                { l: "Total distance covered", v: "646 mi", Icon: Activity },
-                { l: "Fuel consumed today", v: "333 L", Icon: Fuel },
-                { l: "Operational cost", v: "$2,700", Icon: DollarSign },
-                { l: "On-time trip rate", v: "100%", Icon: CheckCircle },
-              ].map(({ l, v, Icon }) => (
-                <div key={l} className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="size-6 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-                      <Icon size={12} className="text-slate-400" />
+              {/* Utilization */}
+              <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                <h3 className="text-[13px] font-semibold text-slate-900 mb-4">Fleet Utilization</h3>
+                <div className="space-y-4">
+                  {displayUtil.map(({ label, total, active, color }) => (
+                    <div key={label}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[12px] font-medium text-slate-600">{label}</span>
+                        <span className="text-[11px] text-slate-400 tabular-nums">{active}/{total}</span>
+                      </div>
+                      <ProgressBar value={active} max={total} color={color} />
+                      <p className="text-right mt-1 text-[10px] text-slate-400">{total === 0 ? "0" : Math.round((active / total) * 100)}%</p>
                     </div>
-                    <span className="text-[12px] text-slate-600 truncate">{l}</span>
-                  </div>
-                  <span className="text-[12px] font-bold text-slate-900 shrink-0 tabular-nums">{v}</span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Alert */}
-          <div className="bg-amber-50 rounded-xl border border-amber-100 p-4 flex items-start gap-2.5">
-            <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-[12px] font-semibold text-amber-800">2 Alerts Require Attention</p>
-              <p className="text-[11px] text-amber-600 mt-1 leading-relaxed">License expiring for Lisa Park in 44 days. V-003 engine service overdue.</p>
+              {/* Today glance */}
+              <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+                <h3 className="text-[13px] font-semibold text-slate-900 mb-3.5">Today at a Glance</h3>
+                <div className="space-y-3">
+                  {[
+                    { l: "Total distance covered", v: "646 mi", Icon: Activity },
+                    { l: "Fuel consumed today", v: "333 L", Icon: Fuel },
+                    { l: "Operational cost", v: "$2,700", Icon: DollarSign },
+                    { l: "On-time trip rate", v: "100%", Icon: CheckCircle },
+                  ].map(({ l, v, Icon }) => (
+                    <div key={l} className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="size-6 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+                          <Icon size={12} className="text-slate-400" />
+                        </div>
+                        <span className="text-[12px] text-slate-600 truncate">{l}</span>
+                      </div>
+                      <span className="text-[12px] font-bold text-slate-900 shrink-0 tabular-nums">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Alert */}
+              <div className="bg-amber-50 rounded-xl border border-amber-100 p-4 flex items-start gap-2.5">
+                <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-[12px] font-semibold text-amber-800">2 Alerts Require Attention</p>
+                  <p className="text-[11px] text-amber-600 mt-1 leading-relaxed">License expiring for Lisa Park in 44 days. V-003 engine service overdue.</p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2126,16 +2273,28 @@ function SettingsScreen({ userName, userRole }: { userName: string; userRole: st
 export default function App() {
   const [screen, setScreen] = useState<Screen>("auth");
   const [collapsed, setCollapsed] = useState(false);
-  const [userRole, setUserRole] = useState<"fleet_manager" | "safety_officer" | "driver" | "financial_analyst">("fleet_manager");
-  const [userName, setUserName] = useState("Alex Kumar");
+  const [authToken, setAuthToken] = useState<string | null>(localStorage.getItem("token"));
+  const [userRole, setUserRole] = useState<"fleet_manager" | "safety_officer" | "driver" | "financial_analyst">(
+    (localStorage.getItem("userRole") as any) || "fleet_manager"
+  );
+  const [userName, setUserName] = useState<string>(localStorage.getItem("userName") || "Alex Kumar");
   const [drivers, setDrivers] = useState<Driver[]>(driversData);
 
   if (screen === "auth") {
     return (
       <AuthScreen
-        onLogin={(role, name) => {
+        onLogin={(role, name, token) => {
           setUserRole(role);
           setUserName(name);
+          localStorage.setItem("userRole", role);
+          localStorage.setItem("userName", name);
+          if (token) {
+            setAuthToken(token);
+            localStorage.setItem("token", token);
+          } else {
+            setAuthToken(null);
+            localStorage.removeItem("token");
+          }
           setScreen("dashboard");
         }}
       />
@@ -2155,7 +2314,7 @@ export default function App() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav screen={screen} userName={userName} />
         <main className="flex-1 overflow-auto p-5 lg:p-6">
-          {screen === "dashboard"   && <DashboardScreen drivers={drivers} />}
+          {screen === "dashboard"   && <DashboardScreen authToken={authToken} onNav={setScreen} />}
           {screen === "vehicles"    && <VehiclesScreen />}
           {screen === "drivers"     && <DriversScreen drivers={drivers} setDrivers={setDrivers} userRole={userRole} />}
           {screen === "dispatch"    && <DispatchScreen drivers={drivers} />}

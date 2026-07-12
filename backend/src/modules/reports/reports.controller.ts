@@ -1,10 +1,18 @@
 import { Response, NextFunction } from 'express';
 import { ReportsService } from './reports.service';
 import { AuthRequest } from '../../middleware/auth';
+import { VehicleStatus } from '@prisma/client';
 
 export const getDashboardKPIs = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const kpis = await ReportsService.getDashboardKPIs();
+    const { type, status, region } = req.query;
+    const filters = {
+      type: type ? String(type) : undefined,
+      status: status ? (String(status) as VehicleStatus) : undefined,
+      region: region ? String(region) : undefined,
+    };
+
+    const kpis = await ReportsService.getDashboardKPIs(filters);
     res.json({
       status: 'success',
       data: kpis,

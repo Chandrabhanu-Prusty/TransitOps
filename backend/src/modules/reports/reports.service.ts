@@ -2,7 +2,12 @@ import prisma from '../../lib/prisma';
 import { VehicleStatus, DriverStatus, TripStatus } from '@prisma/client';
 
 export class ReportsService {
-  static async getDashboardKPIs() {
+  static async getDashboardKPIs(filters?: { type?: string; status?: VehicleStatus; region?: string }) {
+    const vehicleWhere: any = {};
+    if (filters?.type) vehicleWhere.type = filters.type;
+    if (filters?.status) vehicleWhere.status = filters.status;
+    if (filters?.region) vehicleWhere.region = filters.region;
+
     const [
       totalVehicles,
       activeVehicles,
@@ -12,15 +17,31 @@ export class ReportsService {
       pendingTrips,
       driversOnDuty,
     ] = await Promise.all([
-      prisma.vehicle.count(),
-      prisma.vehicle.count({ where: { status: VehicleStatus.on_trip } }),
-      prisma.vehicle.count({ where: { status: VehicleStatus.available } }),
-      prisma.vehicle.count({ where: { status: VehicleStatus.in_shop } }),
-      prisma.trip.count({ where: { status: TripStatus.dispatched } }),
-      prisma.trip.count({ where: { status: TripStatus.draft } }),
+      prisma.vehicle.count({ where: vehicleWhere }),
+      prisma.vehicle.count({ where: { ...vehicleWhere, status: VehicleStatus.on_trip } }),
+      prisma.vehicle.count({ where: { ...vehicleWhere, status: VehicleStatus.available } }),
+      prisma.vehicle.count({ where: { ...vehicleWhere, status: VehicleStatus.in_shop } }),
+      prisma.trip.count({
+        where: {
+          status: TripStatus.dispatched,
+          vehicle: Object.keys(vehicleWhere).length > 0 ? vehicleWhere : undefined,
+        },
+      }),
+      prisma.trip.count({
+        where: {
+          status: TripStatus.draft,
+          vehicle: Object.keys(vehicleWhere).length > 0 ? vehicleWhere : undefined,
+        },
+      }),
       prisma.driver.count({
         where: {
           status: { in: [DriverStatus.available, DriverStatus.on_trip] },
+          trips: Object.keys(vehicleWhere).length > 0 ? {
+            some: {
+              status: { in: [TripStatus.dispatched, TripStatus.completed] },
+              vehicle: vehicleWhere,
+            },
+          } : undefined,
         },
       }),
     ]);
