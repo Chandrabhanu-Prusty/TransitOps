@@ -101,11 +101,12 @@ TransitOps/
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── components/     # Protected route guards
+│   │   │   ├── components/     # Protected route guards & UI primitives
+│   │   │   ├── hooks/          # React Query hooks (useVehicles, etc)
 │   │   │   ├── pages/          # Login & registration pages
+│   │   │   ├── services/       # Axios API client (api.ts, auth.service.ts)
 │   │   │   └── DashboardApp.tsx# Main dashboard application
 │   │   ├── lib/
-│   │   │   ├── api.ts          # Axios / Fetch client wrappers
 │   │   │   └── auth.tsx        # AuthProvider context
 │   │   └── App.tsx             # React entrypoint (Router provider)
 ```

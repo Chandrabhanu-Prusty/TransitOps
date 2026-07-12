@@ -244,12 +244,18 @@ function FleetProvider({ children, role, setRole }: { children: React.ReactNode,
 const statusMap: Record<string, { bg: string; text: string; dot: string }> = {
   available:     { bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
   "on-trip":     { bg: "bg-blue-50",     text: "text-blue-700",    dot: "bg-blue-500" },
+  on_trip:       { bg: "bg-blue-50",     text: "text-blue-700",    dot: "bg-blue-500" },
   "in-shop":     { bg: "bg-orange-50",   text: "text-orange-700",  dot: "bg-orange-500" },
+  in_shop:       { bg: "bg-orange-50",   text: "text-orange-700",  dot: "bg-orange-500" },
   retired:       { bg: "bg-slate-100",   text: "text-slate-500",   dot: "bg-slate-400" },
   "in-progress": { bg: "bg-blue-50",     text: "text-blue-700",    dot: "bg-blue-500" },
   pending:       { bg: "bg-amber-50",    text: "text-amber-700",   dot: "bg-amber-500" },
   completed:     { bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
   cancelled:     { bg: "bg-red-50",      text: "text-red-700",     dot: "bg-red-400" },
+  draft:         { bg: "bg-slate-100",   text: "text-slate-500",   dot: "bg-slate-400" },
+  dispatched:    { bg: "bg-blue-50",     text: "text-blue-700",    dot: "bg-blue-500" },
+  active:        { bg: "bg-blue-50",     text: "text-blue-700",    dot: "bg-blue-500" },
+  closed:        { bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
   "on-duty":     { bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
   "off-duty":    { bg: "bg-slate-100",   text: "text-slate-500",   dot: "bg-slate-400" },
   scheduled:     { bg: "bg-violet-50",   text: "text-violet-700",  dot: "bg-violet-500" },
@@ -257,7 +263,7 @@ const statusMap: Record<string, { bg: string; text: string; dot: string }> = {
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = statusMap[status] ?? { bg: "bg-slate-100", text: "text-slate-500", dot: "bg-slate-400" };
-  const label = status.split("-").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
+  const label = status.split(/[-_]/).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
   return (
     <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", cfg.bg, cfg.text)}>
       <span className={cn("size-1.5 rounded-full shrink-0", cfg.dot)} />
@@ -471,6 +477,11 @@ function Sidebar({ screen, setScreen, collapsed, onToggle }: {
 
 function TopNav({ screen }: { screen: Screen }) {
   const { title, sub } = pageMeta[screen];
+  const { currentUser } = useFleet();
+  const { user } = useAuth();
+
+  const displayName = user?.name || currentUser.name;
+
   return (
     <header className="h-[60px] bg-white border-b border-slate-100 flex items-center px-6 gap-4 shrink-0">
       <div className="flex-1 min-w-0">
@@ -489,8 +500,8 @@ function TopNav({ screen }: { screen: Screen }) {
           <span className="absolute top-1.5 right-1.5 size-1.5 bg-red-500 rounded-full" />
         </button>
         <button className="flex items-center gap-2 pl-2.5 pr-2 py-1.5 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
-          <Avatar name="Alex Kumar" />
-          <span className="text-[13px] font-medium text-slate-700 hidden md:block">Alex Kumar</span>
+          <Avatar name={displayName} />
+          <span className="text-[13px] font-medium text-slate-700 hidden md:block">{displayName}</span>
           <ChevronDown size={11} className="text-slate-400" />
         </button>
       </div>
@@ -531,17 +542,17 @@ function DashboardScreen() {
   };
 
   // Active Vehicles
-  const activeVehCount = vehicles.filter(v => v.status === "on-trip").length;
+  const activeVehCount = vehicles.filter(v => v.status === "on-trip" || v.status === "on_trip").length;
   // Available Vehicles
   const availVehCount = vehicles.filter(v => v.status === "available").length;
   // In Maintenance
-  const maintVehCount = vehicles.filter(v => v.status === "in-shop").length;
+  const maintVehCount = vehicles.filter(v => v.status === "in-shop" || v.status === "in_shop").length;
   // Active Trips
-  const activeTripsCount = trips.filter(t => t.status === "in-progress").length;
+  const activeTripsCount = trips.filter(t => t.status === "in-progress" || t.status === "dispatched").length;
   // Pending Trips
-  const pendingTripsCount = trips.filter(t => t.status === "pending").length;
+  const pendingTripsCount = trips.filter(t => t.status === "pending" || t.status === "draft").length;
   // Drivers On Duty
-  const driversOnDutyCount = drivers.filter(d => d.status === "on-duty").length;
+  const driversOnDutyCount = drivers.filter(d => d.status === "on-duty" || d.status === "on_trip" || d.status === "available").length;
 
   // Fleet Utilization
   const nonRetiredVehs = vehicles.filter(v => v.status !== "retired").length;
@@ -557,15 +568,18 @@ function DashboardScreen() {
     { label: "Fleet Utilization", value: `${utilizationPct}%`, icon: Activity, trend: "up" as const, trendValue: `Of non-retired vehicles`, color: "bg-violet-500" },
   ];
 
-  // Types
-  const heavyTotal = vehicles.filter(v => v.type === "Heavy Truck" && v.status !== "retired").length;
-  const heavyActive = vehicles.filter(v => v.type === "Heavy Truck" && v.status === "on-trip").length;
+  // Types — check both frontend field `type` and backend field; match status both ways
+  const vehType = (v: any) => v.type ?? '';
+  const isOnTrip = (v: any) => v.status === "on-trip" || v.status === "on_trip";
 
-  const mediumTotal = vehicles.filter(v => v.type === "Medium Truck" && v.status !== "retired").length;
-  const mediumActive = vehicles.filter(v => v.type === "Medium Truck" && v.status === "on-trip").length;
+  const heavyTotal = vehicles.filter(v => vehType(v).includes("Heavy") || vehType(v).includes("Box Truck")).filter(v => v.status !== "retired").length;
+  const heavyActive = vehicles.filter(v => (vehType(v).includes("Heavy") || vehType(v).includes("Box Truck")) && isOnTrip(v)).length;
 
-  const lightTotal = vehicles.filter(v => v.type === "Light Van" && v.status !== "retired").length;
-  const lightActive = vehicles.filter(v => v.type === "Light Van" && v.status === "on-trip").length;
+  const mediumTotal = vehicles.filter(v => vehType(v).includes("Medium") || vehType(v).includes("Flatbed")).filter(v => v.status !== "retired").length;
+  const mediumActive = vehicles.filter(v => (vehType(v).includes("Medium") || vehType(v).includes("Flatbed")) && isOnTrip(v)).length;
+
+  const lightTotal = vehicles.filter(v => vehType(v).includes("Light") || vehType(v).includes("Van")).filter(v => v.status !== "retired").length;
+  const lightActive = vehicles.filter(v => (vehType(v).includes("Light") || vehType(v).includes("Van")) && isOnTrip(v)).length;
 
   const util = [
     { label: "Heavy Trucks", total: heavyTotal, active: heavyActive, color: "bg-blue-500" },
@@ -734,118 +748,100 @@ function DashboardScreen() {
 // ─── VEHICLES ────────────────────────────────────────────────────────────────
 
 function VehiclesScreen() {
-  const { vehicles, setVehicles, role } = useFleet();
+  const { vehicles, createVehicle, deleteVehicle, role } = useFleet();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
 
-  // Form states
-  const [formName, setFormName] = useState("");
-  const [formType, setFormType] = useState("Heavy Truck");
-  const [formPlate, setFormPlate] = useState("");
-  const [formYear, setFormYear] = useState(new Date().getFullYear());
-  const [formFuel, setFormFuel] = useState("Diesel");
-  const [formMileage, setFormMileage] = useState("");
+  // Form states – mapped to backend Prisma schema fields
+  const [formNameModel, setFormNameModel] = useState("");
+  const [formType, setFormType] = useState("Van");
+  const [formRegNo, setFormRegNo] = useState("");
+  const [formOdometer, setFormOdometer] = useState("");
   const [formCapacity, setFormCapacity] = useState("");
   const [formAcqCost, setFormAcqCost] = useState("");
+  const [formRegion, setFormRegion] = useState("");
   const [formError, setFormError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isReadOnly = role === "dispatcher" || role === "viewer";
 
+  // Normalise status for filtering (backend uses on_trip / in_shop)
+  const matchesFilter = (v: any) => {
+    if (filter === "all") return true;
+    const s = v.status;
+    if (filter === "available") return s === "available";
+    if (filter === "on_trip") return s === "on_trip" || s === "on-trip";
+    if (filter === "in_shop") return s === "in_shop" || s === "in-shop";
+    if (filter === "retired") return s === "retired";
+    return s === filter;
+  };
+
   const list = vehicles.filter(v =>
-    (filter === "all" || v.status === filter) &&
-    (v.name.toLowerCase().includes(search.toLowerCase()) || v.plate.toLowerCase().includes(search.toLowerCase()))
+    matchesFilter(v) &&
+    ((v.nameModel ?? v.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+     (v.registrationNumber ?? v.plate ?? "").toLowerCase().includes(search.toLowerCase()))
   );
 
   const counts = {
     all: vehicles.length,
     available: vehicles.filter(v => v.status === "available").length,
-    "on-trip": vehicles.filter(v => v.status === "on-trip").length,
-    "in-shop": vehicles.filter(v => v.status === "in-shop").length
+    on_trip: vehicles.filter(v => v.status === "on_trip" || v.status === "on-trip").length,
+    in_shop: vehicles.filter(v => v.status === "in_shop" || v.status === "in-shop").length,
+  };
+
+  const resetForm = () => {
+    setFormNameModel(""); setFormRegNo(""); setFormOdometer("");
+    setFormCapacity(""); setFormAcqCost(""); setFormRegion("");
+    setFormError(""); setIsSubmitting(false);
   };
 
   const handleAddVehicle = () => {
-    if (!formName || !formPlate || !formMileage || !formCapacity || !formAcqCost) {
-      setFormError("All fields are required.");
+    if (!formNameModel || !formRegNo || !formCapacity || !formAcqCost) {
+      setFormError("Name, Registration Number, Max Capacity, and Acquisition Cost are required.");
       return;
     }
-    const cleanPlate = formPlate.trim().toUpperCase();
-    if (vehicles.some(v => v.plate.toUpperCase() === cleanPlate)) {
-      setFormError(`A vehicle with plate number "${cleanPlate}" already exists.`);
-      return;
-    }
-
-    const odometer = parseInt(formMileage.replace(/[^0-9]/g, "")) || 0;
-    const capacity = parseFloat(formCapacity) || 0;
+    const maxLoadCapacity = parseFloat(formCapacity) || 0;
     const acquisitionCost = parseFloat(formAcqCost) || 0;
+    if (maxLoadCapacity <= 0) { setFormError("Max load capacity must be a positive number."); return; }
+    if (acquisitionCost <= 0) { setFormError("Acquisition cost must be a positive number."); return; }
 
-    const newVehicle = {
-      id: `V-00${vehicles.length + 1}`,
-      name: formName,
-      type: formType,
-      plate: cleanPlate,
-      year: Number(formYear),
-      status: "available",
-      mileage: `${odometer.toLocaleString()} mi`,
-      odometer,
-      lastService: "New Vehicle",
-      fuel: formFuel,
-      capacity,
-      acquisitionCost,
-      region: "Midwest",
-    };
-
-    setVehicles([...vehicles, newVehicle]);
-    setShowModal(false);
-    // Reset form
-    setFormName("");
-    setFormPlate("");
-    setFormMileage("");
-    setFormCapacity("");
-    setFormAcqCost("");
+    setIsSubmitting(true);
     setFormError("");
+    createVehicle({
+      registrationNumber: formRegNo.trim().toUpperCase(),
+      nameModel: formNameModel.trim(),
+      type: formType,
+      maxLoadCapacity,
+      odometer: parseFloat(formOdometer) || 0,
+      acquisitionCost,
+      region: formRegion.trim() || null,
+    });
+    setShowModal(false);
+    resetForm();
   };
 
   const handleDeleteVehicle = (id: string) => {
     const v = vehicles.find(veh => veh.id === id);
     if (!v) return;
-    if (v.status === "on-trip") {
-      alert(`Cannot delete vehicle ${v.name} (${v.plate}) because it is currently on a trip.`);
-      return;
-    }
-    if (v.status === "in-shop") {
-      alert(`Cannot delete vehicle ${v.name} (${v.plate}) because it is currently in maintenance.`);
-      return;
-    }
-    if (window.confirm(`Are you sure you want to delete vehicle ${v.name}?`)) {
-      setVehicles(vehicles.filter(veh => veh.id !== id));
-    }
+    const name = v.nameModel ?? v.name ?? "this vehicle";
+    if (v.status === "on_trip" || v.status === "on-trip") { alert(`Cannot delete ${name} — currently on a trip.`); return; }
+    if (v.status === "in_shop" || v.status === "in-shop") { alert(`Cannot delete ${name} — currently in maintenance.`); return; }
+    if (window.confirm(`Are you sure you want to delete ${name}?`)) deleteVehicle(id);
   };
 
   const handleExportCSV = () => {
-    const headers = ["ID", "Name & Model", "Type", "Plate", "Year", "Status", "Mileage", "Capacity (Tons)", "Acquisition Cost ($)"];
+    const headers = ["ID", "Name & Model", "Type", "Reg. No.", "Status", "Odometer (km)", "Max Load (kg)", "Cost ($)", "Region"];
     const rows = list.map(v => [
-      v.id,
-      v.name,
-      v.type,
-      v.plate,
-      v.year,
-      v.status,
-      v.mileage,
-      v.capacity ?? "",
-      v.acquisitionCost ?? ""
+      v.id, v.nameModel ?? v.name ?? "", v.type ?? "", v.registrationNumber ?? v.plate ?? "",
+      v.status ?? "", v.odometer ?? "", v.maxLoadCapacity ?? v.capacity ?? "", v.acquisitionCost ?? "", v.region ?? "",
     ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," 
+    const csvContent = "data:text/csv;charset=utf-8,"
       + [headers.join(","), ...rows.map(e => e.map(val => `"${val}"`).join(","))].join("\n");
-    
-    const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", encodeURI(csvContent));
     link.setAttribute("download", `transitops_vehicles_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   return (
@@ -854,24 +850,18 @@ function VehiclesScreen() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="text" placeholder="Search by name or plate number…" value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder="Search by name or registration number…" value={search} onChange={e => setSearch(e.target.value)}
             className="pl-9 pr-4 py-2.5 text-[13px] border border-slate-200 rounded-xl bg-white w-full focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)}
           className="px-4 py-2.5 text-[13px] border border-slate-200 rounded-xl bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer min-w-[150px]">
           <option value="all">All Statuses</option>
           <option value="available">Available</option>
-          <option value="on-trip">On Trip</option>
-          <option value="in-shop">In Shop</option>
+          <option value="on_trip">On Trip</option>
+          <option value="in_shop">In Shop</option>
           <option value="retired">Retired</option>
         </select>
-        <button onClick={() => {
-          if (isReadOnly) {
-            alert("Your role has read-only access. You do not have permission to add vehicles.");
-            return;
-          }
-          setShowModal(true);
-        }}
+        <button onClick={() => { if (isReadOnly) { alert("Read-only access. You cannot add vehicles."); return; } setShowModal(true); }}
           className={cn("flex items-center gap-2 px-4 py-2.5 text-white text-[13px] font-semibold rounded-xl transition-all shadow-sm whitespace-nowrap",
             isReadOnly ? "bg-slate-300 cursor-not-allowed shadow-none" : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
           )}>
@@ -884,8 +874,8 @@ function VehiclesScreen() {
         {[
           { label: "Total Fleet", val: counts.all, cls: "text-slate-900" },
           { label: "Available", val: counts.available, cls: "text-emerald-600" },
-          { label: "On Trip", val: counts["on-trip"], cls: "text-blue-600" },
-          { label: "In Shop", val: counts["in-shop"], cls: "text-orange-600" },
+          { label: "On Trip", val: counts.on_trip, cls: "text-blue-600" },
+          { label: "In Shop", val: counts.in_shop, cls: "text-orange-600" },
         ].map(({ label, val, cls }) => (
           <div key={label} className="bg-white rounded-xl border border-slate-100 shadow-sm px-4 py-3 text-center">
             <p className={cn("text-xl font-bold tabular-nums", cls)}>{val}</p>
@@ -906,27 +896,27 @@ function VehiclesScreen() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-50 bg-slate-50/50">
-                <TH>ID</TH><TH>Name & Model</TH><TH>Type</TH><TH>Plate</TH><TH>Year</TH><TH>Status</TH><TH>Mileage</TH><TH>Last Service</TH><TH></TH>
+                <TH>Name & Model</TH><TH>Type</TH><TH>Reg. No.</TH><TH>Status</TH><TH>Odometer</TH><TH>Max Load</TH><TH>Cost</TH><TH>Region</TH><TH></TH>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {list.map(v => (
                 <tr key={v.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <TD><span className="text-[11px] font-mono text-slate-400">{v.id}</span></TD>
                   <TD>
                     <div className="flex items-center gap-3">
                       <div className="size-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
                         <Truck size={13} className="text-blue-600" />
                       </div>
-                      <span className="text-[13px] font-semibold text-slate-900">{v.name}</span>
+                      <span className="text-[13px] font-semibold text-slate-900">{v.nameModel ?? v.name}</span>
                     </div>
                   </TD>
                   <TD><span className="text-[12px] text-slate-600">{v.type}</span></TD>
-                  <TD><span className="text-[12px] font-mono font-medium text-slate-700">{v.plate}</span></TD>
-                  <TD><span className="text-[12px] text-slate-600">{v.year}</span></TD>
+                  <TD><span className="text-[12px] font-mono font-medium text-slate-700">{v.registrationNumber ?? v.plate}</span></TD>
                   <TD><StatusBadge status={v.status} /></TD>
-                  <TD><span className="text-[12px] text-slate-600 tabular-nums">{v.mileage}</span></TD>
-                  <TD><span className="text-[12px] text-slate-400">{v.lastService}</span></TD>
+                  <TD><span className="text-[12px] text-slate-600 tabular-nums">{(v.odometer ?? 0).toLocaleString()} km</span></TD>
+                  <TD><span className="text-[12px] text-slate-600 tabular-nums">{(v.maxLoadCapacity ?? v.capacity ?? 0).toLocaleString()} kg</span></TD>
+                  <TD><span className="text-[12px] font-semibold text-slate-900 tabular-nums">${(v.acquisitionCost ?? 0).toLocaleString()}</span></TD>
+                  <TD><span className="text-[12px] text-slate-400">{v.region ?? "—"}</span></TD>
                   <TD>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={12} className="text-blue-600" /></button>
@@ -950,7 +940,7 @@ function VehiclesScreen() {
         </div>
       </div>
 
-      <Modal open={showModal} onClose={() => { setShowModal(false); setFormError(""); }} title="Add New Vehicle">
+      <Modal open={showModal} onClose={() => { setShowModal(false); resetForm(); }} title="Add New Vehicle">
         <div className="space-y-4">
           {formError && (
             <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-[12px] text-red-600">
@@ -959,9 +949,12 @@ function VehiclesScreen() {
             </div>
           )}
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Vehicle Name"><input className={ic} value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Volvo FH16" /></Field>
+            <Field label="Name & Model"><input className={ic} value={formNameModel} onChange={e => setFormNameModel(e.target.value)} placeholder="e.g. Volvo FH16 Heavy Duty" /></Field>
             <Field label="Type">
               <select className={ic} value={formType} onChange={e => setFormType(e.target.value)}>
+                <option value="Box Truck">Box Truck</option>
+                <option value="Flatbed">Flatbed</option>
+                <option value="Van">Van</option>
                 <option value="Heavy Truck">Heavy Truck</option>
                 <option value="Medium Truck">Medium Truck</option>
                 <option value="Light Van">Light Van</option>
@@ -969,27 +962,20 @@ function VehiclesScreen() {
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="License Plate"><input className={ic} value={formPlate} onChange={e => setFormPlate(e.target.value)} placeholder="ABC-1234" /></Field>
-            <Field label="Year"><input type="number" className={ic} value={formYear} onChange={e => setFormYear(Number(e.target.value))} placeholder="2024" /></Field>
+            <Field label="Registration Number"><input className={ic} value={formRegNo} onChange={e => setFormRegNo(e.target.value)} placeholder="V-003-DEF" /></Field>
+            <Field label="Region (optional)"><input className={ic} value={formRegion} onChange={e => setFormRegion(e.target.value)} placeholder="e.g. North Depot" /></Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Fuel Type">
-              <select className={ic} value={formFuel} onChange={e => setFormFuel(e.target.value)}>
-                <option value="Diesel">Diesel</option>
-                <option value="Petrol">Petrol</option>
-                <option value="Electric">Electric</option>
-                <option value="Hybrid">Hybrid</option>
-              </select>
-            </Field>
-            <Field label="Current Mileage (mi)"><input className={ic} value={formMileage} onChange={e => setFormMileage(e.target.value)} placeholder="e.g. 45000" /></Field>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Max Capacity (Tons)"><input type="number" className={ic} value={formCapacity} onChange={e => setFormCapacity(e.target.value)} placeholder="e.g. 20" /></Field>
-            <Field label="Acquisition Cost ($)"><input type="number" className={ic} value={formAcqCost} onChange={e => setFormAcqCost(e.target.value)} placeholder="e.g. 120000" /></Field>
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Odometer (km)"><input type="number" className={ic} value={formOdometer} onChange={e => setFormOdometer(e.target.value)} placeholder="0" /></Field>
+            <Field label="Max Load (kg)"><input type="number" className={ic} value={formCapacity} onChange={e => setFormCapacity(e.target.value)} placeholder="e.g. 12000" /></Field>
+            <Field label="Acquisition Cost ($)"><input type="number" className={ic} value={formAcqCost} onChange={e => setFormAcqCost(e.target.value)} placeholder="e.g. 110000" /></Field>
           </div>
           <div className="flex gap-3 pt-2">
-            <button onClick={() => { setShowModal(false); setFormError(""); }} className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
-            <button onClick={handleAddVehicle} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold transition-colors">Add Vehicle</button>
+            <button onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+            <button onClick={handleAddVehicle} disabled={isSubmitting} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              {isSubmitting ? <RefreshCw size={13} className="animate-spin" /> : null}
+              {isSubmitting ? "Adding…" : "Add Vehicle"}
+            </button>
           </div>
         </div>
       </Modal>
@@ -997,7 +983,8 @@ function VehiclesScreen() {
   );
 }
 
-// ─── DRIVERS ─────────────────────────────────────────────────────────────────
+
+
 
 function DriversScreen() {
   const { drivers, setDrivers, role } = useFleet();

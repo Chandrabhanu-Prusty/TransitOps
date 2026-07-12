@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 // Base URL for the backend API. Vite env variable or fallback.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api';
 
 export const api = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
+  baseURL: API_BASE_URL,
 });
 
 // Attach JWT token from localStorage if available.

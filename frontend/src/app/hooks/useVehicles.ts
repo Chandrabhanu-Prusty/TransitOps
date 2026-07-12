@@ -30,7 +30,7 @@ export const useVehicles = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vehicles'] }),
   });
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/vehicles/${id}`, data),
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.patch(`/vehicles/${id}`, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vehicles'] }),
   });
   const del = useMutation({
