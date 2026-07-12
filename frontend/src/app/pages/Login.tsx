@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { apiFetch, ApiError } from '../../lib/api';
 import {
-  Truck, Lock, Mail, AlertCircle, Loader2,
+  Truck, Lock, Mail, AlertCircle, Loader2, Eye, EyeOff
 } from 'lucide-react';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -42,6 +42,7 @@ function LoginForm() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -94,11 +95,18 @@ function LoginForm() {
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
-            type="password"
+            type={showPassword ? "text" : "password"}
             {...register('password')}
-            className={`${ic} pl-10`}
+            className={`${ic} pl-10 pr-10`}
             placeholder="Enter your password"
           />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
         </div>
       </Field>
 
@@ -139,7 +147,7 @@ export default function Login() {
         <div className="absolute top-1/4 left-1/3 w-80 h-80 bg-blue-600/25 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-1/4 right-1/4 w-56 h-56 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col h-full px-12 py-10">
+        <div className="relative z-10 flex flex-col h-full px-16 py-12 max-w-2xl mx-auto w-full">
           {/* Logo */}
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-xl shadow-blue-600/40">
@@ -152,7 +160,7 @@ export default function Login() {
           </div>
 
           {/* Hero text */}
-          <div className="flex-1 flex flex-col justify-center max-w-sm">
+          <div className="flex-1 flex flex-col justify-center max-w-xl mt-8">
             <h2 className="text-[42px] font-extrabold text-white leading-[1.1] tracking-tight mb-4">
               Smarter fleet<br />operations,<br />at scale.
             </h2>

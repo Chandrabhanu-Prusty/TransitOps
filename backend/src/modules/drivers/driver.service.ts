@@ -5,6 +5,10 @@ import { DriverStatus } from '@prisma/client';
 
 export class DriverService {
   static async create(input: CreateDriverInput) {
+    if (new Date(input.licenseExpiry) < new Date()) {
+      throw new AppError('License expiry date must be in the future', 400);
+    }
+
     const existing = await prisma.driver.findUnique({
       where: { licenseNumber: input.licenseNumber },
     });
@@ -52,6 +56,10 @@ export class DriverService {
   }
 
   static async update(id: string, input: UpdateDriverInput) {
+    if (input.licenseExpiry && new Date(input.licenseExpiry) < new Date()) {
+      throw new AppError('License expiry date must be in the future', 400);
+    }
+
     const driver = await prisma.driver.findUnique({ where: { id } });
     if (!driver) {
       throw new AppError('Driver not found', 404);

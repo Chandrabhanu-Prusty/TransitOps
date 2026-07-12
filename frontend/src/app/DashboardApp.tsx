@@ -281,12 +281,19 @@ function SafetyBadge({ score }: { score: number }) {
 }
 
 function ExpiryBadge({ expiry }: { expiry: string }) {
+  if (!expiry) return <span className="text-xs text-slate-400">—</span>;
   const days = Math.ceil((new Date(expiry).getTime() - TODAY.getTime()) / 86400000);
   const formatted = new Date(expiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const cls = days > 90 ? "text-slate-600" : days > 30 ? "text-amber-600" : "text-red-600";
+  
+  if (days <= 0) {
+    return <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold"><AlertTriangle size={10} /> Expired ({formatted})</span>;
+  }
+  if (days <= 30) {
+    return <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-xs font-bold"><AlertTriangle size={10} /> Expiring ({formatted})</span>;
+  }
+
   return (
-    <span className={cn("text-xs font-medium", cls)}>
-      {days <= 30 && <AlertTriangle size={10} className="inline mr-1" />}
+    <span className="text-xs font-medium text-slate-600">
       {formatted}
     </span>
   );
@@ -987,7 +994,8 @@ function VehiclesScreen() {
 
 
 function DriversScreen() {
-  const { drivers, setDrivers, role } = useFleet();
+  const { role } = useFleet();
+  const { drivers, createDriverAsync, deleteDriverAsync } = useDrivers();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
@@ -995,7 +1003,8 @@ function DriversScreen() {
   // Form states
   const [formName, setFormName] = useState("");
   const [formPhone, setFormPhone] = useState("");
-  const [formLicense, setFormLicense] = useState("CDL-A");
+  const [formLicenseCategory, setFormLicenseCategory] = useState("CDL-A");
+  const [formLicenseNumber, setFormLicenseNumber] = useState("");
   const [formExpiry, setFormExpiry] = useState("");
   const [formSafetyScore, setFormSafetyScore] = useState("100");
   const [formError, setFormError] = useState("");
@@ -1007,8 +1016,8 @@ function DriversScreen() {
     d.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAddDriver = () => {
-    if (!formName || !formPhone || !formExpiry || !formSafetyScore) {
+  const handleAddDriver = async () => {
+    if (!formName || !formPhone || !formLicenseNumber || !formExpiry || !formSafetyScore) {
       setFormError("All fields are required.");
       return;
     }
@@ -1019,38 +1028,41 @@ function DriversScreen() {
       return;
     }
 
-    const newDriver = {
-      id: `D-00${drivers.length + 1}`,
-      name: formName,
-      phone: formPhone,
-      license: formLicense,
-      expiry: formExpiry,
-      safetyScore,
-      status: "available",
-      trips: 0,
-      vehicle: null,
-    };
+    try {
+      await createDriverAsync({
+        name: formName,
+        contactNumber: formPhone,
+        licenseCategory: formLicenseCategory,
+        licenseNumber: formLicenseNumber,
+        licenseExpiry: new Date(formExpiry).toISOString(),
+        safetyScore,
+      });
 
-    setDrivers([...drivers, newDriver]);
-    setShowModal(false);
-    // Reset form
-    setFormName("");
-    setFormPhone("");
-    setFormLicense("CDL-A");
-    setFormExpiry("");
-    setFormSafetyScore("100");
-    setFormError("");
+      setShowModal(false);
+      // Reset form
+      setFormName("");
+      setFormPhone("");
+      setFormLicenseCategory("CDL-A");
+      setFormLicenseNumber("");
+      setFormExpiry("");
+      setFormSafetyScore("100");
+      setFormError("");
+    } catch (err: any) {
+      setFormError(err.response?.data?.message || err.message || "Failed to create driver");
+    }
   };
 
-  const handleDeleteDriver = (id: string) => {
-    const d = drivers.find(drv => drv.id === id);
-    if (!d) return;
-    if (d.status === "on-duty") {
-      alert(`Cannot delete driver ${d.name} because they are currently on duty.`);
+  const handleDeleteDriver = async (id: string, name: string, status: string) => {
+    if (status === "on_trip") {
+      alert(`Cannot delete driver ${name} because they are currently on a trip.`);
       return;
     }
-    if (window.confirm(`Are you sure you want to delete driver ${d.name}?`)) {
-      setDrivers(drivers.filter(drv => drv.id !== id));
+    if (window.confirm(`Are you sure you want to delete driver ${name}?`)) {
+      try {
+        await deleteDriverAsync(id);
+      } catch (err: any) {
+        alert(err.response?.data?.message || "Failed to delete driver");
+      }
     }
   };
 
@@ -1065,9 +1077,10 @@ function DriversScreen() {
         <select value={filter} onChange={e => setFilter(e.target.value)}
           className="px-4 py-2.5 text-[13px] border border-slate-200 rounded-xl bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer min-w-[150px]">
           <option value="all">All Statuses</option>
-          <option value="on-duty">On Duty</option>
           <option value="available">Available</option>
-          <option value="off-duty">Off Duty</option>
+          <option value="off_duty">Off Duty</option>
+          <option value="on_trip">On Trip</option>
+          <option value="suspended">Suspended</option>
         </select>
         <button onClick={() => {
           if (isReadOnly) {
@@ -1091,7 +1104,7 @@ function DriversScreen() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-50 bg-slate-50/50">
-                <TH>Driver</TH><TH>Phone</TH><TH>License</TH><TH>Expiry</TH><TH>Safety Score</TH><TH>Status</TH><TH>Total Trips</TH><TH>Assigned Vehicle</TH><TH></TH>
+                <TH>Driver</TH><TH>Phone</TH><TH>License No</TH><TH>Class</TH><TH>Expiry</TH><TH>Safety Score</TH><TH>Status</TH><TH></TH>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -1102,31 +1115,22 @@ function DriversScreen() {
                       <Avatar name={d.name} />
                       <div>
                         <p className="text-[13px] font-semibold text-slate-900">{d.name}</p>
-                        <p className="text-[10px] text-slate-400">{d.id}</p>
+                        <p className="text-[10px] text-slate-400">{d.id.substring(0,8)}</p>
                       </div>
                     </div>
                   </TD>
-                  <TD><span className="text-[12px] text-slate-600">{d.phone}</span></TD>
+                  <TD><span className="text-[12px] text-slate-600">{d.contactNumber}</span></TD>
                   <TD>
-                    <span className="text-[11px] font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{d.license}</span>
+                    <span className="text-[11px] font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{d.licenseNumber}</span>
                   </TD>
-                  <TD><ExpiryBadge expiry={d.expiry} /></TD>
+                  <TD><span className="text-[12px] font-medium text-slate-600">{d.licenseCategory}</span></TD>
+                  <TD><ExpiryBadge expiry={d.licenseExpiry} /></TD>
                   <TD><SafetyBadge score={d.safetyScore} /></TD>
                   <TD><StatusBadge status={d.status} /></TD>
-                  <TD><span className="text-[13px] font-bold text-slate-900 tabular-nums">{d.trips}</span></TD>
                   <TD>
-                    {d.vehicle
-                      ? <span className="text-[11px] font-mono font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{d.vehicle}</span>
-                      : <span className="text-[12px] text-slate-300">—</span>}
-                  </TD>
-                  <TD>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 hover:bg-blue-50 rounded-lg"><Eye size={12} className="text-blue-600" /></button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
                       {!isReadOnly && (
-                        <>
-                          <button className="p-1.5 hover:bg-slate-100 rounded-lg"><Edit2 size={12} className="text-slate-500" /></button>
-                          <button onClick={() => handleDeleteDriver(d.id)} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 size={12} className="text-red-500" /></button>
-                        </>
+                        <button onClick={() => handleDeleteDriver(d.id, d.name, d.status)} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 size={12} className="text-red-500" /></button>
                       )}
                     </div>
                   </TD>
@@ -1134,7 +1138,13 @@ function DriversScreen() {
               ))}
               {list.length === 0 && (
                 <tr>
-                  <TD colSpan={9} className="text-center py-6 text-slate-400">No drivers match filters</TD>
+                  <TD colSpan={8} className="text-center py-12 text-slate-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <Users size={24} className="text-slate-300" />
+                      <p className="text-[14px] font-medium text-slate-600">No drivers found</p>
+                      <p className="text-[12px] text-slate-500">Add a driver to get started.</p>
+                    </div>
+                  </TD>
                 </tr>
               )}
             </tbody>
@@ -1156,16 +1166,20 @@ function DriversScreen() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="License Class">
-              <select className={ic} value={formLicense} onChange={e => setFormLicense(e.target.value)}>
+              <select className={ic} value={formLicenseCategory} onChange={e => setFormLicenseCategory(e.target.value)}>
                 <option value="CDL-A">CDL Class A</option>
                 <option value="CDL-B">CDL Class B</option>
+                <option value="CDL-C">CDL Class C</option>
               </select>
             </Field>
-            <Field label="License Expiry Date"><input type="date" className={ic} value={formExpiry} onChange={e => setFormExpiry(e.target.value)} /></Field>
+            <Field label="License Number"><input type="text" className={ic} value={formLicenseNumber} onChange={e => setFormLicenseNumber(e.target.value)} placeholder="e.g. D1234567" /></Field>
           </div>
-          <Field label="Initial Safety Score (0-100)">
-            <input type="number" className={ic} value={formSafetyScore} onChange={e => setFormSafetyScore(e.target.value)} placeholder="100" />
-          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="License Expiry Date"><input type="date" className={ic} value={formExpiry} onChange={e => setFormExpiry(e.target.value)} /></Field>
+            <Field label="Initial Safety Score (0-100)">
+              <input type="number" className={ic} value={formSafetyScore} onChange={e => setFormSafetyScore(e.target.value)} placeholder="100" />
+            </Field>
+          </div>
           <div className="flex gap-3 pt-2">
             <button onClick={() => { setShowModal(false); setFormError(""); }} className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-[13px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
             <button onClick={handleAddDriver} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold transition-colors">Add Driver</button>
