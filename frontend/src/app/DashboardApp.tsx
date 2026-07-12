@@ -11,6 +11,8 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
+import CreateUser from "./pages/CreateUser";
+import { useAuth } from "../lib/auth";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
 
@@ -403,12 +405,20 @@ function Sidebar({ current, onNav, collapsed, onToggle }: {
   current: Screen; onNav: (s: Screen) => void; collapsed: boolean; onToggle: () => void;
 }) {
   const { currentUser, role } = useFleet();
+  const { user, logout } = useAuth();
 
   const allowedItems = navItems.filter(item => {
     if (item.id === "reports" && role === "dispatcher") return false;
     if (item.id === "settings" && role !== "admin") return false;
     return true;
   });
+
+  const formatRole = (r: string) => {
+    return r
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
 
   return (
     <aside className={cn(
@@ -450,12 +460,12 @@ function Sidebar({ current, onNav, collapsed, onToggle }: {
       <div className="border-t border-slate-800 p-2 space-y-1 shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-2.5 px-2 py-2">
-            <Avatar name={currentUser.name} />
+            <Avatar name={user?.name || currentUser.name} />
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-slate-200 truncate leading-none">{currentUser.name}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">{currentUser.roleName}</p>
+              <p className="text-[12px] font-semibold text-slate-200 truncate leading-none">{user?.name || currentUser.name}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{user ? formatRole(user.role) : currentUser.roleName}</p>
             </div>
-            <button onClick={() => window.location.reload()} className="p-1 hover:bg-slate-800 rounded transition-colors" title="Log out">
+            <button onClick={logout} className="p-1 hover:bg-slate-800 rounded transition-colors" title="Log out">
               <LogOut size={12} className="text-slate-500" />
             </button>
           </div>
@@ -2974,18 +2984,10 @@ function AccessDenied() {
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-export default function App() {
-  const [screen, setScreen] = useState<Screen>("auth");
+export default function DashboardApp() {
+  const [screen, setScreen] = useState<Screen>("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [role, setRole] = useState<"admin" | "manager" | "dispatcher" | "viewer">("admin");
-
-  if (screen === "auth") {
-    return (
-      <FleetProvider role={role} setRole={setRole}>
-        <AuthScreen onLogin={() => setScreen("dashboard")} />
-      </FleetProvider>
-    );
-  }
 
   return (
     <FleetProvider role={role} setRole={setRole}>
@@ -2997,7 +2999,8 @@ export default function App() {
 function AppContent({ screen, setScreen, collapsed, setCollapsed }: {
   screen: Screen; setScreen: (s: Screen) => void; collapsed: boolean; setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
-  const { role } = useFleet();
+  const { user } = useAuth();
+  const role = user?.role;
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-[Inter,sans-serif]">
@@ -3011,8 +3014,8 @@ function AppContent({ screen, setScreen, collapsed, setCollapsed }: {
           {screen === "dispatch"    && <DispatchScreen />}
           {screen === "maintenance" && <MaintenanceScreen />}
           {screen === "fuel"        && <FuelScreen />}
-          {screen === "reports"     && (role === "dispatcher" ? <AccessDenied /> : <ReportsScreen />)}
-          {screen === "settings"    && (role !== "admin" ? <AccessDenied /> : <SettingsScreen />)}
+          {screen === "reports"     && (role === "driver" || role === "safety_officer" ? <AccessDenied /> : <ReportsScreen />)}
+          {screen === "settings"    && (role !== "fleet_manager" ? <AccessDenied /> : <SettingsScreen />)}
         </main>
       </div>
     </div>

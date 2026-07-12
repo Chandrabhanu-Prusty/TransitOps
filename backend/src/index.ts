@@ -15,7 +15,7 @@ import expenseRoutes from './modules/expenses/expense.routes';
 import reportsRoutes from './modules/reports/reports.routes';
 
 const app = express();
-const PORT = parseInt(process.env.PORT ?? '3001', 10);
+const PORT = parseInt(process.env.PORT ?? '5000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
 const NODE_ENV = process.env.NODE_ENV ?? 'development';
 

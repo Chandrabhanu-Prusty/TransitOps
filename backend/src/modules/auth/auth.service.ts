@@ -75,4 +75,22 @@ export class AuthService {
       token,
     };
   }
+
+  static async getUserById(id: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new AppError('User not found or inactive', 401);
+    }
+    return user;
+  }
 }

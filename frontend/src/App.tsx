@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RouterProvider, createBrowserRouter, Link } from 'react-router-dom'
+import { RouterProvider, createBrowserRouter, Link, Outlet } from 'react-router-dom'
 import DashboardApp from './app/DashboardApp'
+import Login from './app/pages/Login'
+import ProtectedRoute from './app/components/ProtectedRoute'
+import { AuthProvider } from './lib/auth'
 import './styles/index.css'
 
 // ─── 404 Page ─────────────────────────────────────────────────────────────────
@@ -38,9 +41,26 @@ function NotFoundPage() {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 const router = createBrowserRouter([
-  { path: '/', element: <DashboardApp /> },
-  { path: '*', element: <NotFoundPage /> },
-])
+  {
+    element: (
+      <AuthProvider>
+        <Outlet />
+      </AuthProvider>
+    ),
+    children: [
+      { path: '/login', element: <Login /> },
+      {
+        path: '/',
+        element: (
+          <ProtectedRoute>
+            <DashboardApp />
+          </ProtectedRoute>
+        )
+      },
+      { path: '*', element: <NotFoundPage /> }
+    ]
+  }
+]);
 
 // ─── Query Client ─────────────────────────────────────────────────────────────
 
@@ -60,5 +80,5 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>
-  )
+  );
 }
