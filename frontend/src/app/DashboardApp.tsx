@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Truck, Users, MapPin, Wrench, Fuel, BarChart3, Settings,
@@ -656,10 +656,12 @@ function AuthScreen({ onLogin }: { onLogin: (role: "fleet_manager" | "safety_off
 
 function DashboardScreen({ 
   authToken, 
-  onNav 
+  onNav,
+  vehiclesList = vehicles
 }: { 
   authToken: string | null; 
   onNav: (s: Screen) => void; 
+  vehiclesList?: any[];
 }) {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -733,26 +735,23 @@ function DashboardScreen({
   ];
 
   if (hasData) {
-    if (typeFilter === "Van") {
+    if (typeFilter === "Light Van" || typeFilter === "Van") {
       displayUtil = [
         { label: "Light Vans", total: totalVehicles, active: activeVehicles, color: "bg-violet-500" }
       ];
-    } else if (typeFilter === "Box Truck") {
-      const halfTotal = Math.ceil(totalVehicles / 2);
-      const halfActive = Math.ceil(activeVehicles / 2);
+    } else if (typeFilter === "Heavy Truck" || typeFilter === "Box Truck") {
       displayUtil = [
-        { label: "Heavy Trucks", total: halfTotal, active: halfActive, color: "bg-blue-500" },
-        { label: "Medium Trucks", total: totalVehicles - halfTotal, active: activeVehicles - halfActive, color: "bg-indigo-500" }
+        { label: "Heavy Trucks", total: totalVehicles, active: activeVehicles, color: "bg-blue-500" }
       ];
-    } else if (typeFilter === "Flatbed") {
+    } else if (typeFilter === "Medium Truck" || typeFilter === "Flatbed") {
       displayUtil = [
-        { label: "Flatbed Trailers", total: totalVehicles, active: activeVehicles, color: "bg-blue-500" }
+        { label: "Medium Trucks", total: totalVehicles, active: activeVehicles, color: "bg-indigo-500" }
       ];
     } else {
       displayUtil = [
-        { label: "Heavy Trucks", total: Math.min(totalVehicles, 5), active: Math.min(activeVehicles, 3), color: "bg-blue-500" },
-        { label: "Medium Trucks", total: Math.max(0, Math.min(totalVehicles - 5, 2)), active: Math.max(0, Math.min(activeVehicles - 3, 1)), color: "bg-indigo-500" },
-        { label: "Light Vans", total: Math.max(0, totalVehicles - 7), active: Math.max(0, activeVehicles - 4), color: "bg-violet-500" }
+        { label: "Heavy Trucks", total: vehiclesList.filter(v => v.type === "Heavy Truck" || v.type === "Box Truck").length, active: vehiclesList.filter(v => (v.type === "Heavy Truck" || v.type === "Box Truck") && v.status === "on-trip").length, color: "bg-blue-500" },
+        { label: "Medium Trucks", total: vehiclesList.filter(v => v.type === "Medium Truck" || v.type === "Flatbed").length, active: vehiclesList.filter(v => (v.type === "Medium Truck" || v.type === "Flatbed") && v.status === "on-trip").length, color: "bg-indigo-500" },
+        { label: "Light Vans", total: vehiclesList.filter(v => v.type === "Light Van" || v.type === "Van").length, active: vehiclesList.filter(v => (v.type === "Light Van" || v.type === "Van") && v.status === "on-trip").length, color: "bg-violet-500" }
       ];
     }
   }
@@ -773,7 +772,7 @@ function DashboardScreen({
       }))
     : tripsData.map((t: any, idx: number) => ({
         ...t,
-        vehicleType: idx % 3 === 0 ? "Van" : idx % 3 === 1 ? "Box Truck" : "Flatbed",
+        vehicleType: idx % 3 === 0 ? "Light Van" : idx % 3 === 1 ? "Heavy Truck" : "Medium Truck",
         vehicleStatus: idx % 2 === 0 ? "available" : "on_trip",
         region: idx % 2 === 0 ? "North Depot" : "East Depot"
       }));
@@ -784,6 +783,8 @@ function DashboardScreen({
     if (regionFilter && t.region !== regionFilter) return false;
     return true;
   });
+
+  const vehicleTypes = Array.from(new Set(vehiclesList.map((v: any) => v.type)));
 
   return (
     <div className="space-y-5">
@@ -805,9 +806,9 @@ function DashboardScreen({
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
             className="w-full px-3 py-2 text-[13px] border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer">
             <option value="">All Types</option>
-            <option value="Van">Van</option>
-            <option value="Box Truck">Box Truck</option>
-            <option value="Flatbed">Flatbed</option>
+            {vehicleTypes.map((type: any) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
           </select>
         </div>
         <div>
@@ -960,17 +961,17 @@ function DashboardScreen({
 
 // ─── VEHICLES ────────────────────────────────────────────────────────────────
 
-function VehiclesScreen() {
+function VehiclesScreen({ vehiclesList = vehicles }: { vehiclesList?: any[] } = {}) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
 
-  const list = vehicles.filter(v =>
+  const list = vehiclesList.filter(v =>
     (filter === "all" || v.status === filter) &&
     (v.name.toLowerCase().includes(search.toLowerCase()) || v.plate.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const counts = { all: vehicles.length, available: vehicles.filter(v => v.status === "available").length, "on-trip": vehicles.filter(v => v.status === "on-trip").length, "in-shop": vehicles.filter(v => v.status === "in-shop").length };
+  const counts = { all: vehiclesList.length, available: vehiclesList.filter(v => v.status === "available").length, "on-trip": vehiclesList.filter(v => v.status === "on-trip").length, "in-shop": vehiclesList.filter(v => v.status === "in-shop").length };
 
   return (
     <div className="space-y-5">
@@ -2327,6 +2328,37 @@ export default function App() {
   const [userName, setUserName] = useState<string>(localStorage.getItem("userName") || "Alex Kumar");
   const [drivers, setDrivers] = useState<Driver[]>(driversData);
 
+  const { data: realVehicles } = useQuery({
+    queryKey: ["vehiclesList"],
+    queryFn: async () => {
+      const headers: Record<string, string> = {};
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+      const res = await fetch(`${API_BASE}/api/vehicles`, { headers });
+      if (!res.ok) throw new Error("Failed to fetch vehicles");
+      const json = await res.json();
+      return json.data;
+    }
+  });
+
+  const [vehiclesList, setVehiclesList] = useState<any[]>(vehicles);
+
+  useEffect(() => {
+    if (realVehicles && realVehicles.length > 0) {
+      setVehiclesList(realVehicles.map((v: any) => ({
+        id: v.id,
+        name: v.nameModel,
+        type: v.type,
+        plate: v.registrationNumber,
+        year: v.createdAt ? new Date(v.createdAt).getFullYear() : 2024,
+        status: v.status,
+        mileage: v.odometer + " km",
+        lastService: "N/A"
+      })));
+    }
+  }, [realVehicles]);
+
   if (screen === "auth") {
     return (
       <AuthScreen
@@ -2361,8 +2393,8 @@ export default function App() {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopNav screen={screen} userName={userName} />
         <main className="flex-1 overflow-auto p-5 lg:p-6">
-          {screen === "dashboard"   && <DashboardScreen authToken={authToken} onNav={setScreen} />}
-          {screen === "vehicles"    && <VehiclesScreen />}
+          {screen === "dashboard"   && <DashboardScreen authToken={authToken} onNav={setScreen} vehiclesList={vehiclesList} />}
+          {screen === "vehicles"    && <VehiclesScreen vehiclesList={vehiclesList} />}
           {screen === "drivers"     && <DriversScreen drivers={drivers} setDrivers={setDrivers} userRole={userRole} />}
           {screen === "dispatch"    && <DispatchScreen drivers={drivers} />}
           {screen === "maintenance" && <MaintenanceScreen />}
